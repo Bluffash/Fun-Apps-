@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -27,6 +28,7 @@ interface SlotFormProps {
     startsAt: string
     endsAt: string
     capacity: number
+    repeatWeekly?: boolean
   }
 }
 
@@ -47,10 +49,12 @@ export function SlotForm({ sports, initial }: SlotFormProps) {
     startsAt: initial ? toDatetimeLocal(initial.startsAt) : '',
     endsAt: initial ? toDatetimeLocal(initial.endsAt) : '',
     capacity: initial?.capacity ?? 10,
+    repeatWeekly: initial?.repeatWeekly ?? false,
+    repeatWeeks: 4,
   })
   const [loading, setLoading] = useState(false)
 
-  function set(field: string, value: string | number) {
+  function set(field: string, value: string | number | boolean) {
     setForm((f) => ({ ...f, [field]: value }))
   }
 
@@ -59,10 +63,15 @@ export function SlotForm({ sports, initial }: SlotFormProps) {
     setLoading(true)
 
     const body = {
-      ...form,
+      sportId: form.sportId,
+      title: form.title,
+      description: form.description,
+      location: form.location,
       startsAt: new Date(form.startsAt).toISOString(),
       endsAt: new Date(form.endsAt).toISOString(),
       capacity: Number(form.capacity),
+      repeatWeekly: form.repeatWeekly,
+      repeatWeeks: form.repeatWeekly ? Number(form.repeatWeeks) : 1,
     }
 
     const url = isEdit ? `/api/slots/${initial!.id}` : '/api/slots'
@@ -76,9 +85,17 @@ export function SlotForm({ sports, initial }: SlotFormProps) {
     setLoading(false)
 
     if (res.ok) {
-      const slot = await res.json()
-      toast({ title: isEdit ? 'Game updated!' : 'Game created!' })
-      router.push(`/schedule/${slot.id}`)
+      const result = await res.json()
+      const firstSlot = Array.isArray(result) ? result[0] : result
+      const count = Array.isArray(result) ? result.length : 1
+      toast({
+        title: isEdit
+          ? 'Game updated!'
+          : count > 1
+          ? `${count} recurring games created!`
+          : 'Game created!',
+      })
+      router.push(`/schedule/${firstSlot.id}`)
     } else {
       const d = await res.json()
       toast({ title: d.error ?? 'Something went wrong', variant: 'destructive' })
@@ -169,9 +186,43 @@ export function SlotForm({ sports, initial }: SlotFormProps) {
         </div>
       </div>
 
+      {!isEdit && (
+        <div className="rounded-lg border p-4 space-y-3 bg-muted/30">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              id="repeatWeekly"
+              checked={form.repeatWeekly}
+              onCheckedChange={(checked) => set('repeatWeekly', !!checked)}
+            />
+            <Label htmlFor="repeatWeekly" className="font-normal cursor-pointer">
+              Repeat this game weekly
+            </Label>
+          </div>
+          {form.repeatWeekly && (
+            <div className="space-y-2 pl-7">
+              <Label>Number of weeks ({form.repeatWeeks})</Label>
+              <input
+                type="range"
+                min={2}
+                max={12}
+                value={form.repeatWeeks}
+                onChange={(e) => set('repeatWeeks', e.target.value)}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>2 weeks</span><span>12 weeks</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Creates {form.repeatWeeks} game slots, one per week at the same time.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-3 pt-2">
         <Button type="submit" disabled={loading}>
-          {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Game'}
+          {loading ? 'Saving…' : isEdit ? 'Save Changes' : form.repeatWeekly ? `Create ${form.repeatWeeks} Games` : 'Create Game'}
         </Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Cancel

@@ -12,6 +12,7 @@ import { InviteModal } from '@/components/invite/InviteModal'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { DeleteSlotButton } from '@/components/schedule/DeleteSlotButton'
+import { MapEmbed } from '@/components/schedule/MapEmbed'
 
 export default async function SlotDetailPage({ params }: { params: Promise<{ slotId: string }> }) {
   const session = await auth()
@@ -74,6 +75,9 @@ export default async function SlotDetailPage({ params }: { params: Promise<{ slo
           <span>{slot.location}</span>
         </div>
       </div>
+
+      {/* Map */}
+      <MapEmbed location={slot.location} />
 
       <Separator />
 

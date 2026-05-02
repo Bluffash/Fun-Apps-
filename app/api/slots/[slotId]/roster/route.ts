@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { sendEmail, gameJoinedEmailHtml } from '@/lib/email'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slotId: string }> }) {
   const session = await auth()
@@ -22,7 +23,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ slotId
 
   const slot = await (prisma as any).gameSlot.findUnique({
     where: { id: slotId },
-    include: { _count: { select: { rosters: true } } },
+    include: {
+      sport: true,
+      _count: { select: { rosters: true } },
+      creator: { select: { id: true, name: true, email: true } },
+    },
   })
   if (!slot) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -39,6 +44,24 @@ export async function POST(_req: Request, { params }: { params: Promise<{ slotId
     data: { gameSlotId: slotId, userId: session.user.id },
     include: { user: { select: { id: true, name: true } } },
   })
+
+  // Email the game creator when someone joins (skip if creator joins their own game)
+  if (slot.creator.id !== session.user.id && slot.creator.email) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    await sendEmail({
+      to: slot.creator.email,
+      subject: `${session.user.name} joined your game: ${slot.title}`,
+      html: gameJoinedEmailHtml({
+        joinerName: session.user.name,
+        sportIcon: slot.sport.icon,
+        gameTitle: slot.title,
+        currentCount: slot._count.rosters + 1,
+        capacity: slot.capacity,
+        gameUrl: `${appUrl}/schedule/${slotId}`,
+      }),
+    })
+  }
+
   return NextResponse.json(entry, { status: 201 })
 }
 

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { Calendar, Newspaper, Shield, LogOut, Menu, X } from 'lucide-react'
+import { Calendar, Newspaper, Shield, LogOut, Menu, X, Mail, UserCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn, initials } from '@/lib/utils'
@@ -18,6 +18,7 @@ interface NavbarProps {
 const navLinks = [
   { href: '/schedule', label: 'Schedule', icon: Calendar },
   { href: '/feed', label: 'News & Scores', icon: Newspaper },
+  { href: '/invites', label: 'Invites', icon: Mail },
 ]
 
 export function Navbar({ userName, userRole, pendingInvites = 0 }: NavbarProps) {
@@ -67,19 +68,21 @@ export function Navbar({ userName, userRole, pendingInvites = 0 }: NavbarProps) 
 
           <div className="flex items-center gap-3">
             {pendingInvites > 0 && (
-              <Link href="/schedule" className="relative">
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              <Link href="/invites" className="relative inline-flex items-center">
+                <Mail className="w-5 h-5 text-muted-foreground" />
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
                   {pendingInvites}
                 </span>
-                <span className="text-sm text-muted-foreground px-2">Invites</span>
               </Link>
             )}
             <div className="hidden md:flex items-center gap-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {initials(userName)}
-                </AvatarFallback>
-              </Avatar>
+              <Link href="/profile">
+                <Avatar className="h-8 w-8 hover:ring-2 hover:ring-primary transition-all">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    {initials(userName)}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
               <span className="text-sm font-medium hidden lg:block">{userName}</span>
               <Button
                 variant="ghost"
@@ -128,22 +131,37 @@ export function Navbar({ userName, userRole, pendingInvites = 0 }: NavbarProps) 
               Admin
             </Link>
           )}
-          <div className="border-t pt-2 mt-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {initials(userName)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium">{userName}</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => signOut({ callbackUrl: '/login' })}
+          <div className="border-t pt-2 mt-2 space-y-1">
+            <Link
+              href="/profile"
+              className={cn(
+                'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                pathname.startsWith('/profile')
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-accent'
+              )}
+              onClick={() => setMobileOpen(false)}
             >
-              <LogOut className="w-4 h-4 mr-1" /> Sign out
-            </Button>
+              <UserCircle className="w-4 h-4" />
+              Profile
+            </Link>
+            <div className="flex items-center justify-between px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    {initials(userName)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">{userName}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => signOut({ callbackUrl: '/login' })}
+              >
+                <LogOut className="w-4 h-4 mr-1" /> Sign out
+              </Button>
+            </div>
           </div>
         </div>
       )}

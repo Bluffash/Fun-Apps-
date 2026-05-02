@@ -5,7 +5,7 @@ export default auth((req) => {
   const isAuth = !!req.auth
   const pathname = req.nextUrl.pathname
 
-  const protectedPaths = ['/schedule', '/feed', '/admin', '/onboarding']
+  const protectedPaths = ['/schedule', '/feed', '/admin', '/onboarding', '/invites', '/profile']
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
 
   if (isProtected && !isAuth) {
@@ -21,5 +21,5 @@ export default auth((req) => {
 })
 
 export const config = {
-  matcher: ['/schedule/:path*', '/feed/:path*', '/admin/:path*', '/onboarding/:path*'],
+  matcher: ['/schedule/:path*', '/feed/:path*', '/admin/:path*', '/onboarding/:path*', '/invites/:path*', '/profile/:path*'],
 }
