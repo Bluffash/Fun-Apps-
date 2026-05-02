@@ -1,0 +1,57 @@
+import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { SendInviteSchema } from '@/lib/validations'
+import { sendSMS } from '@/lib/twilio'
+import { formatDate, formatTime } from '@/lib/utils'
+
+export async function POST(req: Request, { params }: { params: Promise<{ slotId: string }> }) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { slotId } = await params
+
+  const slot = await (prisma as any).gameSlot.findUnique({
+    where: { id: slotId },
+    include: { sport: true },
+  })
+  if (!slot) return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
+
+  const body = await req.json()
+  const parsed = SendInviteSchema.safeParse(body)
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+
+  const data = parsed.data
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+  if (data.type === 'user') {
+    const existing = await (prisma as any).invite.findFirst({
+      where: { gameSlotId: slotId, recipientId: data.recipientId, status: 'PENDING' },
+    })
+    if (existing) return NextResponse.json({ error: 'Already invited' }, { status: 409 })
+
+    const invite = await (prisma as any).invite.create({
+      data: { gameSlotId: slotId, senderId: session.user.id, recipientId: data.recipientId },
+    })
+    return NextResponse.json(invite, { status: 201 })
+  }
+
+  // Phone-based invite
+  const existingUser = await (prisma as any).user.findUnique({ where: { phone: data.phone } })
+  if (existingUser) {
+    const invite = await (prisma as any).invite.create({
+      data: { gameSlotId: slotId, senderId: session.user.id, recipientId: existingUser.id },
+    })
+    return NextResponse.json(invite, { status: 201 })
+  }
+
+  const invite = await (prisma as any).invite.create({
+    data: { gameSlotId: slotId, senderId: session.user.id, phone: data.phone },
+  })
+
+  const dateStr = formatDate(slot.startsAt, 'EEE, MMM d')
+  const timeStr = formatTime(slot.startsAt)
+  const smsBody = `${session.user.name} invited you to play ${slot.sport.name} on ${dateStr} at ${timeStr} – ${slot.location}. Join: ${appUrl}/invite/accept/${invite.token}`
+
+  await sendSMS(data.phone, smsBody)
+  return NextResponse.json(invite, { status: 201 })
+}
