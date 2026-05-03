@@ -4,6 +4,385 @@
 
 SportsPick is a mobile-first, full-stack web app for organizing pick-up sports games. Users can browse and join weekly game slots, chat with teammates, invite friends, and follow live sports news and scores.
 
+---
+
+## Authentication
+
+**Auth is required.** Every page except `/login` and `/register` redirects unauthenticated visitors to the login screen.
+
+| Question | Answer |
+|---|---|
+| Method | Email + password (bcryptjs, 12 rounds) |
+| Session | JWT — no extra DB hit on every request |
+| After login | Redirected to `/schedule` (the main screen) |
+| First-time user | After signup, redirected to `/onboarding` to pick sport interests before landing on `/schedule` |
+
+---
+
+## User Roles
+
+| Role | Who | Capabilities |
+|---|---|---|
+| **USER** | Everyone who signs up | Create/join/leave games, chat (roster only), invite others, manage own profile |
+| **ADMIN** | App creator + anyone the admin promotes | Everything a USER can do, plus full admin panel below |
+
+**Day 1:** The app creator is the only ADMIN. Admins can promote any registered user to ADMIN via the admin panel.
+
+### Admin-only capabilities
+- View all registered users
+- Remove (delete) any user account
+- Edit or delete any game slot (not just their own)
+- Flag and remove chat messages
+- Promote users to ADMIN role
+
+---
+
+## App Flow — Signup to All Pages
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  New visitor hits any protected URL                             │
+│  → redirected to /login                                         │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+          ┌───────────▼───────────┐
+          │    /login             │
+          │  (see mockup below)   │
+          └───┬───────────────────┘
+              │  No account?
+              ▼
+          ┌───────────────────────┐
+          │    /register          │
+          │  (see mockup below)   │
+          └───────────┬───────────┘
+                      │  Success
+                      ▼
+          ┌───────────────────────┐
+          │    /onboarding        │  ← First-time only
+          │  Pick sport interests │
+          └───────────┬───────────┘
+                      │  Save & continue
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     /schedule  (main screen)                    │
+│  Weekly game grid — browse, join, create games                  │
+└──┬────────────┬────────────┬────────────┬────────────┬──────────┘
+   │            │            │            │            │
+   ▼            ▼            ▼            ▼            ▼
+/schedule    /schedule    /feed       /invites     /profile
+  /new        /[id]
+(create)   (game detail)
+              │
+              ├── Roster
+              ├── Chat (roster members only)
+              ├── Map embed
+              └── Invite friends
+
+ADMIN users also see:
+   ▼
+/admin/slots   — all slots, edit/delete any
+/admin/users   — all users, promote/remove
+/admin/flags   — flagged chat messages
+```
+
+---
+
+## Screen Mockups
+
+### Login Screen — `/login`
+
+```
+┌─────────────────────────────────────┐
+│  🏆 SportsPick                      │
+│                                     │
+│         Welcome back                │
+│    Sign in to your account          │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Email address              │    │
+│  │  you@example.com            │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Password                   │    │
+│  │  ••••••••                   │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │       Sign In               │    │  ← primary button
+│  └─────────────────────────────┘    │
+│                                     │
+│  Don't have an account?             │
+│  → Create one                       │  ← link to /register
+│                                     │
+└─────────────────────────────────────┘
+```
+
+**Behavior:**
+- Wrong credentials → inline error "Invalid email or password"
+- Success → redirect to `/schedule` (or the original URL the user was trying to visit)
+
+---
+
+### Sign Up Screen — `/register`
+
+```
+┌─────────────────────────────────────┐
+│  🏆 SportsPick                      │
+│                                     │
+│          Create account             │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Full name                  │    │
+│  │  Jane Smith                 │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Email address              │    │
+│  │  you@example.com            │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Phone (optional)           │    │
+│  │  +1 555 000 0000            │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Password                   │    │
+│  │  ••••••••                   │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │       Create Account        │    │  ← primary button
+│  └─────────────────────────────┘    │
+│                                     │
+│  Already have an account?           │
+│  → Sign in                          │  ← link to /login
+│                                     │
+└─────────────────────────────────────┘
+```
+
+**Behavior:**
+- Email already taken → inline error
+- Success → auto-login → redirect to `/onboarding`
+
+---
+
+### Onboarding — `/onboarding` (first-time only)
+
+```
+┌─────────────────────────────────────┐
+│  🏆 SportsPick                      │
+│                                     │
+│  What sports do you play?           │
+│  Pick at least one to get started   │
+│                                     │
+│  ┌──────┐ ┌──────┐ ┌──────┐        │
+│  │  ⚽  │ │  🏀  │ │  🎾  │        │
+│  │Soccer│ │Bball │ │Tennis│        │
+│  └──────┘ └──────┘ └──────┘        │
+│  ┌──────┐ ┌──────┐ ┌──────┐        │
+│  │  🏐  │ │  🏈  │ │  ⚾  │        │
+│  │Vball │ │FootB │ │BasebL│        │
+│  └──────┘ └──────┘ └──────┘        │
+│  ┌──────┐ ┌──────┐ ┌──────┐        │
+│  │  🏒  │ │  ⛳  │ │  🏸  │        │
+│  │Hockey│ │ Golf │ │Badmtn│        │
+│  └──────┘ └──────┘ └──────┘        │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │   Save & Go to Schedule     │    │
+│  └─────────────────────────────┘    │
+└─────────────────────────────────────┘
+```
+
+---
+
+### Main Screen — `/schedule`
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🏆 SportsPick  Schedule  News  Invites(2)  [avatar]     │  ← navbar
+├─────────────────────────────────────────────────────────┤
+│  ← May 5 – May 11, 2025 →          [+ Create Game]     │
+│                                                         │
+│  Filter: All ⚽ 🏀 🎾 🏐 🏈                             │
+│                                                         │
+│  MON 5    TUE 6    WED 7    THU 8    FRI 9    SAT 10   │
+│  ┌──────┐ ┌──────┐          ┌──────┐          ┌──────┐ │
+│  │ ⚽   │ │ 🏀   │          │ 🎾   │          │ ⚽   │ │
+│  │Soccer│ │Bball │          │Tennis│          │Soccer│ │
+│  │7pm   │ │6pm   │          │8am   │          │10am  │ │
+│  │8/10  │ │5/8   │          │2/4   │          │3/10  │ │
+│  │[Join]│ │[Join]│          │[Full]│          │[Join]│ │
+│  └──────┘ └──────┘          └──────┘          └──────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Game Detail — `/schedule/[id]`
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🏆 SportsPick  Schedule  News  Invites  [avatar]        │
+├─────────────────────────────────────────────────────────┤
+│  ⚽ Soccer                     [Invite] [Joined ✓] [✏]  │
+│  Sunday Morning Soccer                                  │
+│  "5-a-side, bring bibs"                                 │
+│                                                         │
+│  📅 Saturday, May 10, 2025                              │
+│  🕙 10:00 AM – 12:00 PM                                 │
+│  📍 Riverside Park, Pitch 3                             │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  [OpenStreetMap embed]                          │   │
+│  │          ·  Riverside Park                      │   │
+│  │    Open in Maps ↗                               │   │
+│  └─────────────────────────────────────────────────┘   │
+│  ─────────────────────────────────────────────────────  │
+│  Roster (3/10)     │  Game Chat                        │
+│  ┌──────────────┐  │  ┌──────────────────────────────┐ │
+│  │ 1. Jane S.   │  │  │ Jane: anyone bringing a ball?│ │
+│  │ 2. Bob K.    │  │  │ Bob:  yes, got it covered    │ │
+│  │ 3. Mia L.    │  │  │ Mia:  see you there!         │ │
+│  │ 4. —         │  │  │                              │ │
+│  │ 5. —         │  │  │  [Type a message...]  [Send] │ │
+│  └──────────────┘  │  └──────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### My Invites — `/invites`
+
+```
+┌─────────────────────────────────────┐
+│ 🏆 SportsPick                       │
+├─────────────────────────────────────┤
+│  My Invites                         │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │ ⚽  Sunday Soccer           │    │
+│  │     Sat May 10 · 10am       │    │
+│  │     Invited by Jane S.      │    │
+│  │  [Accept]  [Decline]        │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │ 🏀  Tuesday Pickup Ball     │    │
+│  │     Tue May 6 · 6pm         │    │
+│  │     Invited by Bob K.       │    │
+│  │  [Accept]  [Decline]        │    │
+│  └─────────────────────────────┘    │
+└─────────────────────────────────────┘
+```
+
+---
+
+### Profile — `/profile`
+
+```
+┌─────────────────────────────────────┐
+│ 🏆 SportsPick                       │
+├─────────────────────────────────────┤
+│  Profile & Settings                 │
+│                                     │
+│  ┌─ Personal Info ───────────────┐  │
+│  │  Name   [Jane Smith        ]  │  │
+│  │  Email  jane@example.com      │  │  ← read-only
+│  │  Phone  [+1 555 000 0000   ]  │  │
+│  │                   [Save]      │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌─ Sport Interests ─────────────┐  │
+│  │  ⚽ ✓  🏀 ✓  🎾    🏐    🏈  │  │
+│  │  ⚾    🏒    ⛳    🏸    🏓  │  │
+│  │                   [Save]      │  │
+│  └───────────────────────────────┘  │
+└─────────────────────────────────────┘
+```
+
+---
+
+### Admin Panel — `/admin/slots` (ADMIN only)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🏆 SportsPick  Schedule  News  Invites  Admin  [avatar] │
+├─────────────────────────────────────────────────────────┤
+│  Admin Panel                                            │
+│  [Slots]  [Users]  [Flagged Chat]                       │
+│                                                         │
+│  All Game Slots                    [+ New Slot]         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Title           Sport  Date      Spots  Creator │   │
+│  │  ─────────────────────────────────────────────  │   │
+│  │  Sunday Soccer   ⚽     May 10    3/10   Jane   │   │
+│  │  [Edit] [Delete]                                │   │
+│  │  Tuesday Bball   🏀     May 6     5/8    Bob    │   │
+│  │  [Edit] [Delete]                                │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Admin Users — `/admin/users` (ADMIN only)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Users                                                  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Name        Email             Role    Actions   │   │
+│  │  ─────────────────────────────────────────────  │   │
+│  │  Jane Smith  jane@example.com  USER             │   │
+│  │  [Make Admin]  [Remove User]                    │   │
+│  │  Bob K.      bob@example.com   ADMIN            │   │
+│  │  [Revoke Admin]  [Remove User]                  │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Admin Flagged Chat — `/admin/flags` (ADMIN only)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Flagged Chat Messages                                  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Game: Sunday Soccer                            │   │
+│  │  User: anonymous_user                           │   │
+│  │  "This message was flagged for review"          │   │
+│  │  [Remove Message]  [Dismiss Flag]               │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## News & Scores Feed — `/feed`
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🏆 SportsPick  Schedule  News  Invites  [avatar]        │
+├─────────────────────────────────────────────────────────┤
+│  News & Scores          [Split | Scores | News]         │
+│  Following: EPL  NBA  NFL  [+ Add League]               │
+│                                                         │
+│  Latest News            │  Live Scores                  │
+│  ┌───────────────────┐  │  ┌───────────────────────┐   │
+│  │ [img]             │  │  │ EPL · FT               │   │
+│  │ "Liverpool sign…" │  │  │  Arsenal  2–1  Chelsea │   │
+│  │ ESPN · 2h ago     │  │  ├───────────────────────┤   │
+│  ├───────────────────┤  │  │ NBA · Q3 7:42         │   │
+│  │ [img]             │  │  │  Lakers  88–92  Celtics│   │
+│  │ "LeBron returns…" │  │  ├───────────────────────┤   │
+│  │ ESPN · 4h ago     │  │  │ NFL · Final            │   │
+│  └───────────────────┘  │  │  Chiefs 24–17  Bills   │   │
+│                         │  └───────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Tech Stack
 
 | Layer | Choice |
@@ -20,43 +399,6 @@ SportsPick is a mobile-first, full-stack web app for organizing pick-up sports g
 | Validation | Zod |
 | Dates | date-fns |
 
-## Features
-
-### Game Scheduling
-- Weekly calendar grid — browse pick-up game slots by week and sport
-- Any authenticated user can create a game slot (they become the owner)
-- Admins can edit or delete any slot; creators can edit or delete their own
-- Recurring games — create up to 12 weekly repeating slots at once
-- Join/leave a game with live roster updates
-- Game detail page with date, time, location, capacity, and OpenStreetMap embed
-
-### Chat
-- Per-game chat restricted to players on the roster
-- SWR polling every 3 seconds with optimistic message rendering
-- Unauthenticated or non-roster users see a "Join to chat" prompt
-
-### Invite System
-- Invite registered users filtered by shared sport interest
-- Invite by phone number — sends a Twilio SMS with a deeplink token
-- SMS deeplink (`/invite/accept/[token]`) handles register + accept in one flow
-- My Invites page (`/invites`) with Accept/Decline buttons and badge count in the navbar
-
-### News & Scores Feed
-- 12 leagues: Premier League, La Liga, Serie A, Ligue 1, Bundesliga, Champions League, NBA, NFL, MLB, NHL, ATP, PGA Tour
-- ESPN public API proxied through Next.js routes (no API key required, avoids CORS)
-- Scores refresh every 30 seconds; news every 60 seconds
-- Side-by-side desktop layout (news + scores); stacks on mobile
-- Users follow their preferred leagues; preferences saved to the database
-
-### Email Notifications
-- Invite sent — email delivered to the invited user
-- Player joined — email delivered to the game creator when someone joins
-
-### User Profiles
-- Sport interest picker at onboarding and on the profile page
-- Profile page (`/profile`) to update name and phone number
-- Avatar in the navbar links to the profile page
-
 ## Supported Sports
 
 Soccer, Basketball, Pickleball, Tennis, Volleyball, American Football, Baseball, Hockey, Golf, Badminton
@@ -65,14 +407,18 @@ Soccer, Basketball, Pickleball, Tennis, Volleyball, American Football, Baseball,
 
 | Route | Description |
 |---|---|
-| `/schedule` | Weekly game grid |
+| `/login` | Login screen |
+| `/register` | Sign up screen |
+| `/onboarding` | First-run sport picker (new users only) |
+| `/schedule` | Weekly game grid (main screen) |
 | `/schedule/[slotId]` | Game detail, roster, chat, map |
 | `/schedule/new` | Create a new game slot |
 | `/feed` | News & scores feed |
 | `/invites` | Pending invites with accept/decline |
 | `/profile` | User settings and sport interests |
-| `/onboarding` | First-run sport picker |
-| `/admin/slots` | Admin moderation panel |
+| `/admin/slots` | Admin — all game slots |
+| `/admin/users` | Admin — all users, promote/remove |
+| `/admin/flags` | Admin — flagged chat messages |
 | `/invite/accept/[token]` | SMS deeplink acceptance |
 
 ## API Routes
@@ -91,6 +437,9 @@ Soccer, Basketball, Pickleball, Tennis, Volleyball, American Football, Baseball,
 | `/api/users/me/profile` | GET, PATCH | Read / update profile |
 | `/api/users/me/feed` | GET, PUT | Followed leagues |
 | `/api/users/search` | GET | Search users by sport |
+| `/api/admin/users` | GET | List all users (admin only) |
+| `/api/admin/users/[id]` | PATCH, DELETE | Promote / remove user (admin only) |
+| `/api/admin/messages/[id]/flag` | PATCH, DELETE | Flag / remove chat message (admin only) |
 | `/api/espn/scores` | GET | Proxied ESPN scoreboard |
 | `/api/espn/news` | GET | Proxied ESPN news |
 
