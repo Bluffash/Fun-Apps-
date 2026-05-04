@@ -29,11 +29,19 @@ SportsPick is a mobile-first, full-stack web app for organizing pick-up sports g
 **Day 1:** The app creator is the only ADMIN. Admins can promote any registered user to ADMIN via the admin panel.
 
 ### Admin-only capabilities
-- View all registered users
-- Remove (delete) any user account
+- View all registered users with join date, games joined, and slots created
+- Promote any user to ADMIN or revoke their admin role
+- Remove (delete) any user account (cannot delete own account)
 - Edit or delete any game slot (not just their own)
-- Flag and remove chat messages
-- Promote users to ADMIN role
+- Review all flagged chat messages across every game
+- Dismiss a flag (message reappears in chat) or permanently delete the message
+- All three admin sections share a tab nav: Game Slots / Users / Flagged Chat
+
+### Chat flagging (all logged-in roster members)
+- Hover over any message you didn't write → a flag icon appears
+- Flagged messages are hidden from all regular users at the API level
+- Flagged messages remain visible to admins (shown with a warning border)
+- Admins can unflag a message directly from the chat or from `/admin/flags`
 
 ---
 
@@ -244,13 +252,19 @@ ADMIN users also see:
 │  Roster (3/10)     │  Game Chat                        │
 │  ┌──────────────┐  │  ┌──────────────────────────────┐ │
 │  │ 1. Jane S.   │  │  │ Jane: anyone bringing a ball?│ │
-│  │ 2. Bob K.    │  │  │ Bob:  yes, got it covered    │ │
+│  │ 2. Bob K.    │  │  │ Bob:  yes, got it  🚩(hover) │ │
 │  │ 3. Mia L.    │  │  │ Mia:  see you there!         │ │
 │  │ 4. —         │  │  │                              │ │
 │  │ 5. —         │  │  │  [Type a message...]  [Send] │ │
 │  └──────────────┘  │  └──────────────────────────────┘ │
 └─────────────────────────────────────────────────────────┘
 ```
+
+**Chat flag behavior:**
+- Hover any message you didn't write → flag icon appears on the right
+- Click to flag → message is hidden from all other regular users immediately
+- Flagged messages show with a red border for admins; regular users don't see them at all
+- Admins can unflag from chat or from the Admin Flagged Chat panel
 
 ---
 
@@ -346,15 +360,32 @@ ADMIN users also see:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Flagged Chat Messages                                  │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Game: Sunday Soccer                            │   │
-│  │  User: anonymous_user                           │   │
-│  │  "This message was flagged for review"          │   │
-│  │  [Remove Message]  [Dismiss Flag]               │   │
+│  Admin Panel                                            │
+│  [Game Slots]  [Users]  [Flagged Chat]  ← shared tabs  │
+├─────────────────────────────────────────────────────────┤
+│  3 flagged messages                                     │
+│                                                         │
+│  ┌─ red border ────────────────────────────────────┐   │
+│  │  🚩 Bob K.  ·  2h ago  ·  Sunday Soccer ↗       │   │
+│  │  ┌───────────────────────────────────────────┐  │   │
+│  │  │  "This message was flagged for review"    │  │   │
+│  │  └───────────────────────────────────────────┘  │   │
+│  │  [Dismiss Flag]  [Delete Message]               │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─ red border ────────────────────────────────────┐   │
+│  │  🚩 Mia L.  ·  5h ago  ·  Tuesday Bball ↗       │   │
+│  │  ┌───────────────────────────────────────────┐  │   │
+│  │  │  "Another flagged message"                │  │   │
+│  │  └───────────────────────────────────────────┘  │   │
+│  │  [Dismiss Flag]  [Delete Message]               │   │
 │  └─────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
+
+**Actions:**
+- **Dismiss Flag** — clears the flag; message reappears in chat for all users
+- **Delete Message** — permanently removes the message from the database (with confirmation prompt)
 
 ---
 
@@ -439,7 +470,7 @@ Soccer, Basketball, Pickleball, Tennis, Volleyball, American Football, Baseball,
 | `/api/users/search` | GET | Search users by sport |
 | `/api/admin/users` | GET | List all users (admin only) |
 | `/api/admin/users/[id]` | PATCH, DELETE | Promote / remove user (admin only) |
-| `/api/admin/messages/[id]/flag` | PATCH, DELETE | Flag / remove chat message (admin only) |
+| `/api/admin/messages/[id]` | PATCH, DELETE | Flag/unflag or delete chat message (admin only) |
 | `/api/espn/scores` | GET | Proxied ESPN scoreboard |
 | `/api/espn/news` | GET | Proxied ESPN news |
 
@@ -462,7 +493,7 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ```bash
 npm install
 npx prisma migrate dev
-npx prisma db seed
+npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
 npm run dev
 ```
 
