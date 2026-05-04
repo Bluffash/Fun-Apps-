@@ -107,6 +107,7 @@ model ChatMessage {
   gameSlotId String
   userId     String
   body       String
+  flagged    Boolean  @default(false)
   createdAt  DateTime @default(now())
 
   gameSlot GameSlot @relation(fields: [gameSlotId], references: [id], onDelete: Cascade)
