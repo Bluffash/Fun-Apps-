@@ -23,11 +23,8 @@ export default async function AdminSlotsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Admin — All Games</h1>
-          <p className="text-muted-foreground text-sm">{slots.length} total slots</p>
-        </div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">{slots.length} total slots</p>
         <Link href="/schedule/new">
           <Button><Plus className="w-4 h-4 mr-1" />New Slot</Button>
         </Link>

@@ -22,8 +22,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ slotId: 
   const cursor = searchParams.get('cursor')
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100)
 
+  const isAdmin = session.user.role === 'ADMIN'
   const messages = await (prisma as any).chatMessage.findMany({
-    where: { gameSlotId: slotId, ...(cursor ? { id: { lt: cursor } } : {}) },
+    where: {
+      gameSlotId: slotId,
+      ...(cursor ? { id: { lt: cursor } } : {}),
+      ...(!isAdmin ? { flagged: false } : {}),
+    },
     include: { user: { select: { id: true, name: true } } },
     orderBy: { createdAt: 'asc' },
     take: limit,

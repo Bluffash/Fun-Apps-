@@ -93,7 +93,7 @@ export default async function SlotDetailPage({ params }: { params: Promise<{ slo
         <div className="lg:col-span-2">
           <h2 className="font-semibold mb-3">Game Chat</h2>
           {isJoined ? (
-            <ChatPanel slotId={slotId} currentUserId={session.user.id} />
+            <ChatPanel slotId={slotId} currentUserId={session.user.id} isAdmin={canManage} />
           ) : (
             <div className="flex flex-col items-center justify-center h-[400px] border rounded-lg bg-muted/30 text-center p-6">
               <p className="text-muted-foreground mb-3">Join this game to access the chat.</p>
