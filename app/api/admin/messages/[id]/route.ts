@@ -1,6 +1,21 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
+
+/**
+ * Messages are stored at `gameSlots/{slotId}/messages/{msgId}`.
+ * When created, each message doc also stores `docId: ref.id` and `slotId` as fields
+ * so that this admin route can locate them via a collection group query.
+ */
+
+async function findMessageDoc(id: string) {
+  const snap = await adminDb
+    .collectionGroup('messages')
+    .where('docId', '==', id)
+    .limit(1)
+    .get()
+  return snap.empty ? null : snap.docs[0]
+}
 
 export async function PATCH(
   req: Request,
@@ -9,23 +24,30 @@ export async function PATCH(
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
+
   const { flagged } = await req.json()
+  if (typeof flagged !== 'boolean') {
+    return NextResponse.json({ error: 'flagged must be a boolean' }, { status: 400 })
+  }
 
-  const message = await (prisma as any).chatMessage.findUnique({ where: { id } })
-  if (!message) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  // Any roster member can flag; only admins can unflag
+  // Only admins can unflag
   if (flagged === false && session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const updated = await (prisma as any).chatMessage.update({
-    where: { id },
-    data: { flagged },
-    include: { user: { select: { id: true, name: true } } },
-  })
+  const msgDoc = await findMessageDoc(id)
+  if (!msgDoc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json(updated)
+  await msgDoc.ref.update({ flagged })
+
+  const data = msgDoc.data()
+  return NextResponse.json({
+    id: msgDoc.id,
+    ...data,
+    flagged,
+    createdAt: data.createdAt?.toDate?.().toISOString() ?? data.createdAt ?? null,
+    user: { id: data.userId, name: data.userName },
+  })
 }
 
 export async function DELETE(
@@ -38,6 +60,9 @@ export async function DELETE(
   }
   const { id } = await params
 
-  await (prisma as any).chatMessage.delete({ where: { id } })
+  const msgDoc = await findMessageDoc(id)
+  if (!msgDoc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  await msgDoc.ref.delete()
   return NextResponse.json({ ok: true })
 }

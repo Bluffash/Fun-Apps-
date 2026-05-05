@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { redirect, notFound } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
 import { formatDate, formatTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -19,32 +19,30 @@ export default async function SlotDetailPage({ params }: { params: Promise<{ slo
   if (!session) redirect('/login')
   const { slotId } = await params
 
-  const slot = await (prisma as any).gameSlot.findUnique({
-    where: { id: slotId },
-    include: {
-      sport: true,
-      creator: { select: { id: true, name: true } },
-      rosters: { include: { user: { select: { id: true, name: true } } }, orderBy: { joinedAt: 'asc' } },
-    },
-  })
-  if (!slot) notFound()
+  const slotDoc = await adminDb.collection('gameSlots').doc(slotId).get()
+  if (!slotDoc.exists) notFound()
 
-  const players = slot.rosters.map((r: any) => r.user)
-  const isJoined = players.some((p: any) => p.id === session.user.id)
-  const isFull = players.length >= slot.capacity
-  const canManage = slot.creatorId === session.user.id || session.user.role === 'ADMIN'
+  const slot = { id: slotDoc.id, ...slotDoc.data()! }
+  const rosterSnap = await adminDb.collection('gameSlots').doc(slotId).collection('rosters').orderBy('joinedAt', 'asc').get()
+  const players = rosterSnap.docs.map((d) => ({ id: d.id, name: d.data().userName ?? '' }))
+
+  const isJoined = players.some((p) => p.id === session.user.id)
+  const isFull = players.length >= (slot as any).capacity
+  const canManage = (slot as any).creatorId === session.user.id || session.user.role === 'ADMIN'
+
+  const startsAt = (slot as any).startsAt?.toDate?.() ?? new Date((slot as any).startsAt)
+  const endsAt = (slot as any).endsAt?.toDate?.() ?? new Date((slot as any).endsAt)
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-2xl">{slot.sport.icon}</span>
-            <Badge variant="secondary">{slot.sport.name}</Badge>
+            <span className="text-2xl">{(slot as any).sportIcon}</span>
+            <Badge variant="secondary">{(slot as any).sportName}</Badge>
           </div>
-          <h1 className="text-2xl font-bold">{slot.title}</h1>
-          {slot.description && <p className="text-muted-foreground mt-1">{slot.description}</p>}
+          <h1 className="text-2xl font-bold">{(slot as any).title}</h1>
+          {(slot as any).description && <p className="text-muted-foreground mt-1">{(slot as any).description}</p>}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {isJoined && <InviteModal slotId={slotId} />}
@@ -60,36 +58,29 @@ export default async function SlotDetailPage({ params }: { params: Promise<{ slo
         </div>
       </div>
 
-      {/* Info */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="flex items-center gap-2 text-sm">
           <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span>{formatDate(slot.startsAt, 'EEEE, MMMM d, yyyy')}</span>
+          <span>{formatDate(startsAt, 'EEEE, MMMM d, yyyy')}</span>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span>{formatTime(slot.startsAt)} – {formatTime(slot.endsAt)}</span>
+          <span>{formatTime(startsAt)} – {formatTime(endsAt)}</span>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span>{slot.location}</span>
+          <span>{(slot as any).location}</span>
         </div>
       </div>
 
-      {/* Map */}
-      <MapEmbed location={slot.location} />
-
+      <MapEmbed location={(slot as any).location} />
       <Separator />
 
-      {/* Main layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Roster */}
         <div className="lg:col-span-1">
           <h2 className="font-semibold mb-3">Roster</h2>
-          <RosterList players={players} capacity={slot.capacity} currentUserId={session.user.id} />
+          <RosterList players={players} capacity={(slot as any).capacity} currentUserId={session.user.id} />
         </div>
-
-        {/* Chat */}
         <div className="lg:col-span-2">
           <h2 className="font-semibold mb-3">Game Chat</h2>
           {isJoined ? (

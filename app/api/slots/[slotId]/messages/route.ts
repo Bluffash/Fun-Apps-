@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { SendMessageSchema } from '@/lib/validations'
 
 async function assertOnRoster(slotId: string, userId: string) {
-  const entry = await (prisma as any).gameRoster.findUnique({
-    where: { gameSlotId_userId: { gameSlotId: slotId, userId } },
-  })
-  return !!entry
+  const doc = await adminDb.collection('gameSlots').doc(slotId).collection('rosters').doc(userId).get()
+  return doc.exists
 }
 
-export async function GET(req: Request, { params }: { params: Promise<{ slotId: string }> }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ slotId: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { slotId } = await params
@@ -18,21 +17,26 @@ export async function GET(req: Request, { params }: { params: Promise<{ slotId: 
   const onRoster = await assertOnRoster(slotId, session.user.id)
   if (!onRoster) return NextResponse.json({ error: 'Must join game to view chat' }, { status: 403 })
 
-  const { searchParams } = new URL(req.url)
-  const cursor = searchParams.get('cursor')
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100)
-
   const isAdmin = session.user.role === 'ADMIN'
-  const messages = await (prisma as any).chatMessage.findMany({
-    where: {
-      gameSlotId: slotId,
-      ...(cursor ? { id: { lt: cursor } } : {}),
-      ...(!isAdmin ? { flagged: false } : {}),
-    },
-    include: { user: { select: { id: true, name: true } } },
-    orderBy: { createdAt: 'asc' },
-    take: limit,
+  let query = adminDb
+    .collection('gameSlots').doc(slotId)
+    .collection('messages')
+    .orderBy('createdAt', 'asc') as FirebaseFirestore.Query
+
+  if (!isAdmin) {
+    query = query.where('flagged', '==', false)
+  }
+
+  const snap = await query.get()
+  const messages = snap.docs.map((doc) => {
+    const data = doc.data()
+    return {
+      id: doc.id,
+      ...data,
+      createdAt: data.createdAt?.toDate().toISOString() ?? new Date().toISOString(),
+    }
   })
+
   return NextResponse.json(messages)
 }
 
@@ -48,9 +52,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ slotId:
   const parsed = SendMessageSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Invalid message' }, { status: 400 })
 
-  const message = await (prisma as any).chatMessage.create({
-    data: { gameSlotId: slotId, userId: session.user.id, body: parsed.data.body },
-    include: { user: { select: { id: true, name: true } } },
+  const ref = adminDb.collection('gameSlots').doc(slotId).collection('messages').doc()
+  await ref.set({
+    docId: ref.id,
+    slotId,
+    userId: session.user.id,
+    userName: session.user.name,
+    body: parsed.data.body,
+    flagged: false,
+    createdAt: FieldValue.serverTimestamp(),
   })
-  return NextResponse.json(message, { status: 201 })
+
+  return NextResponse.json({ id: ref.id, ok: true }, { status: 201 })
 }

@@ -1,47 +1,68 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
 
 export async function GET(req: Request) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const gameSlotId = searchParams.get('gameSlotId')
-  if (!gameSlotId) return NextResponse.json({ error: 'gameSlotId required' }, { status: 400 })
+  const slotId = searchParams.get('slotId')
+  if (!slotId) return NextResponse.json({ error: 'slotId required' }, { status: 400 })
 
-  const slot = await (prisma as any).gameSlot.findUnique({ where: { id: gameSlotId }, include: { sport: true } })
-  if (!slot) return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
+  // Get slot to find its sportSlug
+  const slotDoc = await adminDb.collection('gameSlots').doc(slotId).get()
+  if (!slotDoc.exists) return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
+  const slot = slotDoc.data()!
+  const sportSlug: string = slot.sportSlug
 
-  const myInterests = await (prisma as any).userSport.findMany({
-    where: { userId: session.user.id },
-    select: { sportId: true },
-  })
-  const mySportIds = myInterests.map((i: any) => i.sportId)
+  // Get the current user's sportIds array
+  const currentUserDoc = await adminDb.collection('users').doc(session.user.id).get()
+  const currentUserData = currentUserDoc.exists ? currentUserDoc.data()! : {}
+  const mySportIds: string[] = currentUserData.sportIds ?? []
 
-  const onRoster = await (prisma as any).gameRoster.findMany({
-    where: { gameSlotId },
-    select: { userId: true },
-  })
-  const pendingInvites = await (prisma as any).invite.findMany({
-    where: { gameSlotId, status: 'PENDING', recipientId: { not: null } },
-    select: { recipientId: true },
-  })
+  // Determine which sport slug to filter by — prefer the slot's sport, fall back to any of user's sports
+  // Use the slot's sportSlug as the primary filter (most relevant)
+  const filterSlug = sportSlug || (mySportIds.length > 0 ? mySportIds[0] : null)
+  if (!filterSlug) {
+    return NextResponse.json([])
+  }
 
-  const excludedIds = [
-    session.user.id,
-    ...onRoster.map((r: any) => r.userId),
-    ...pendingInvites.map((i: any) => i.recipientId),
-  ]
+  // Find users who play this sport
+  const usersSnap = await adminDb
+    .collection('users')
+    .where('sportIds', 'array-contains', filterSlug)
+    .get()
 
-  const users = await (prisma as any).user.findMany({
-    where: {
-      id: { notIn: excludedIds },
-      sportInterests: { some: { sportId: { in: [...mySportIds, slot.sportId] } } },
-    },
-    select: { id: true, name: true, sportInterests: { include: { sport: true } } },
-    take: 20,
-  })
+  // Collect IDs already on the roster
+  const rosterSnap = await adminDb
+    .collection('gameSlots')
+    .doc(slotId)
+    .collection('rosters')
+    .get()
+  const rosterUserIds = new Set(rosterSnap.docs.map((d) => d.id))
+
+  // Collect IDs with pending invites
+  const pendingInviteSnap = await adminDb
+    .collection('invites')
+    .where('gameSlotId', '==', slotId)
+    .where('status', '==', 'PENDING')
+    .get()
+  const pendingRecipientIds = new Set(
+    pendingInviteSnap.docs
+      .map((d) => d.data().recipientId as string | null)
+      .filter((id): id is string => id !== null)
+  )
+
+  const excluded = new Set([session.user.id, ...Array.from(rosterUserIds), ...Array.from(pendingRecipientIds)])
+
+  const users = usersSnap.docs
+    .filter((doc) => !excluded.has(doc.id))
+    .slice(0, 20)
+    .map((doc) => ({
+      id: doc.id,
+      name: doc.data().name as string,
+    }))
 
   return NextResponse.json(users)
 }

@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { signIn } from 'next-auth/react'
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { firebaseAuth } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,13 +22,12 @@ export function InviteAcceptClient({ token, inviteStatus, isFull, isLoggedIn, sl
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [_showRegister, setShowRegister] = useState(!isLoggedIn)
   const [form, setForm] = useState({ name: '', email: '', phone: prefilledPhone, password: '' })
 
   if (inviteStatus === 'ACCEPTED') {
     return (
       <div className="text-center space-y-3">
-        <p className="text-green-600 font-semibold">You've already accepted this invite!</p>
+        <p className="text-green-600 font-semibold">You&apos;ve already accepted this invite!</p>
         <Button onClick={() => router.push(`/schedule/${slotId}`)} className="w-full">View Game</Button>
       </div>
     )
@@ -59,19 +59,25 @@ export function InviteAcceptClient({ token, inviteStatus, isFull, isLoggedIn, sl
   async function registerAndAccept(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const regRes = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    if (!regRes.ok) {
-      const d = await regRes.json()
-      toast({ title: d.error ?? 'Registration failed', variant: 'destructive' })
+    try {
+      const { user } = await createUserWithEmailAndPassword(firebaseAuth, form.email, form.password)
+      await updateProfile(user, { displayName: form.name })
+      const idToken = await user.getIdToken()
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      })
+      await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name, phone: form.phone || null }),
+      })
+      await respond('ACCEPTED')
+    } catch (err: any) {
+      toast({ title: err.message ?? 'Registration failed', variant: 'destructive' })
       setLoading(false)
-      return
     }
-    await signIn('credentials', { email: form.email, password: form.password, redirect: false })
-    await respond('ACCEPTED')
   }
 
   if (!isLoggedIn) {
@@ -99,10 +105,6 @@ export function InviteAcceptClient({ token, inviteStatus, isFull, isLoggedIn, sl
             {loading ? 'Joining…' : 'Create Account & Join Game'}
           </Button>
         </form>
-        <p className="text-center text-xs text-muted-foreground">
-          Already have an account?{' '}
-          <button onClick={() => setShowRegister(false)} className="text-primary hover:underline">Sign in</button>
-        </p>
       </div>
     )
   }

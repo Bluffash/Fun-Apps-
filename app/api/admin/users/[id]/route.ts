@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb, adminAuth } from '@/lib/firebase-admin'
 
 export async function PATCH(
   req: Request,
@@ -17,13 +17,16 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
   }
 
-  const user = await (prisma as any).user.update({
-    where: { id },
-    data: { role },
-    select: { id: true, name: true, role: true },
-  })
+  const userRef = adminDb.collection('users').doc(id)
+  const userDoc = await userRef.get()
+  if (!userDoc.exists) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
 
-  return NextResponse.json(user)
+  await userRef.update({ role })
+
+  const updated = userDoc.data()!
+  return NextResponse.json({ id, name: updated.name ?? '', role })
 }
 
 export async function DELETE(
@@ -40,6 +43,18 @@ export async function DELETE(
     return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 })
   }
 
-  await (prisma as any).user.delete({ where: { id } })
+  // Delete from Firestore
+  await adminDb.collection('users').doc(id).delete()
+
+  // Delete from Firebase Auth
+  try {
+    await adminAuth.deleteUser(id)
+  } catch (err: any) {
+    // If the auth user doesn't exist, that's acceptable — Firestore doc is already gone
+    if (err?.code !== 'auth/user-not-found') {
+      console.error('Error deleting Firebase Auth user:', err)
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }

@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
+import { Timestamp } from 'firebase-admin/firestore'
 import { formatDate, formatTime } from '@/lib/utils'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -12,14 +13,20 @@ export default async function AdminSlotsPage() {
   const session = await auth()
   if (!session || session.user.role !== 'ADMIN') redirect('/schedule')
 
-  const slots = await (prisma as any).gameSlot.findMany({
-    include: {
-      sport: true,
-      creator: { select: { name: true } },
-      _count: { select: { rosters: true } },
-    },
-    orderBy: { startsAt: 'asc' },
-  })
+  const snap = await adminDb.collection('gameSlots').orderBy('startsAt', 'asc').get()
+
+  const slots = await Promise.all(
+    snap.docs.map(async (doc) => {
+      const data = doc.data()
+      const rosterSnap = await adminDb.collection('gameSlots').doc(doc.id).collection('rosters').get()
+      return {
+        id: doc.id,
+        ...data,
+        startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toDate() : new Date(data.startsAt),
+        rosterCount: rosterSnap.size,
+      }
+    })
+  )
 
   return (
     <div>
@@ -31,20 +38,20 @@ export default async function AdminSlotsPage() {
       </div>
 
       <div className="space-y-2">
-        {slots.map((slot: any) => (
+        {slots.map((slot) => (
           <div key={slot.id} className="flex items-center justify-between gap-4 p-4 border rounded-lg bg-card hover:bg-muted/30">
             <div className="flex items-center gap-3 min-w-0">
-              <span className="text-xl shrink-0">{slot.sport.icon}</span>
+              <span className="text-xl shrink-0">{(slot as any).sportIcon}</span>
               <div className="min-w-0">
-                <div className="font-medium truncate">{slot.title}</div>
+                <div className="font-medium truncate">{(slot as any).title}</div>
                 <div className="text-xs text-muted-foreground">
-                  {formatDate(slot.startsAt, 'EEE, MMM d')} · {formatTime(slot.startsAt)} · {slot.location}
+                  {formatDate(slot.startsAt, 'EEE, MMM d')} · {formatTime(slot.startsAt)} · {(slot as any).location}
                 </div>
-                <div className="text-xs text-muted-foreground">by {slot.creator.name}</div>
+                <div className="text-xs text-muted-foreground">by {(slot as any).creatorName}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <Badge variant="secondary">{slot._count.rosters}/{slot.capacity}</Badge>
+              <Badge variant="secondary">{slot.rosterCount}/{(slot as any).capacity}</Badge>
               <Link href={`/admin/slots/${slot.id}/edit`}>
                 <Button variant="outline" size="icon"><Edit className="w-4 h-4" /></Button>
               </Link>

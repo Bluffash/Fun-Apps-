@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
+import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { SendInviteSchema } from '@/lib/validations'
 import { sendSMS } from '@/lib/twilio'
 import { sendEmail, inviteEmailHtml } from '@/lib/email'
@@ -11,11 +12,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slotId:
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { slotId } = await params
 
-  const slot = await (prisma as any).gameSlot.findUnique({
-    where: { id: slotId },
-    include: { sport: true },
-  })
-  if (!slot) return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
+  const slotDoc = await adminDb.collection('gameSlots').doc(slotId).get()
+  if (!slotDoc.exists) return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
+  const slot = slotDoc.data()!
 
   const body = await req.json()
   const parsed = SendInviteSchema.safeParse(body)
@@ -23,58 +22,98 @@ export async function POST(req: Request, { params }: { params: Promise<{ slotId:
 
   const data = parsed.data
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-  const dateStr = formatDate(slot.startsAt, 'EEE, MMM d')
-  const timeStr = formatTime(slot.startsAt)
+  const startsAt = (slot.startsAt as Timestamp).toDate()
+  const dateStr = formatDate(startsAt, 'EEE, MMM d')
+  const timeStr = formatTime(startsAt)
 
   if (data.type === 'user') {
-    const existing = await (prisma as any).invite.findFirst({
-      where: { gameSlotId: slotId, recipientId: data.recipientId, status: 'PENDING' },
-    })
-    if (existing) return NextResponse.json({ error: 'Already invited' }, { status: 409 })
+    // Check for existing PENDING invite for this recipient + slot
+    const existingSnap = await adminDb
+      .collection('invites')
+      .where('gameSlotId', '==', slotId)
+      .where('recipientId', '==', data.recipientId)
+      .where('status', '==', 'PENDING')
+      .limit(1)
+      .get()
 
-    const invite = await (prisma as any).invite.create({
-      data: { gameSlotId: slotId, senderId: session.user.id, recipientId: data.recipientId },
-    })
-
-    // Send email notification to invited user
-    const recipient = await (prisma as any).user.findUnique({
-      where: { id: data.recipientId },
-      select: { email: true, name: true },
-    })
-    if (recipient?.email) {
-      await sendEmail({
-        to: recipient.email,
-        subject: `${session.user.name} invited you to play ${slot.sport.name}`,
-        html: inviteEmailHtml({
-          senderName: session.user.name,
-          sportName: slot.sport.name,
-          sportIcon: slot.sport.icon,
-          gameTitle: slot.title,
-          location: slot.location,
-          dateStr,
-          timeStr,
-          acceptUrl: `${appUrl}/invites`,
-        }),
-      })
+    if (!existingSnap.empty) {
+      return NextResponse.json({ error: 'Already invited' }, { status: 409 })
     }
 
-    return NextResponse.json(invite, { status: 201 })
+    const token = adminDb.collection('invites').doc().id
+    const inviteRef = adminDb.collection('invites').doc(token)
+    const inviteData = {
+      gameSlotId: slotId,
+      senderId: session.user.id,
+      senderName: session.user.name,
+      recipientId: data.recipientId,
+      phone: null,
+      status: 'PENDING',
+      token,
+      sentAt: FieldValue.serverTimestamp(),
+      respondedAt: null,
+    }
+    await inviteRef.set(inviteData)
+
+    // Send email to invited user
+    const recipientDoc = await adminDb.collection('users').doc(data.recipientId).get()
+    if (recipientDoc.exists) {
+      const recipient = recipientDoc.data()!
+      if (recipient.email) {
+        await sendEmail({
+          to: recipient.email,
+          subject: `${session.user.name} invited you to play ${slot.sportName}`,
+          html: inviteEmailHtml({
+            senderName: session.user.name,
+            sportName: slot.sportName,
+            sportIcon: slot.sportIcon,
+            gameTitle: slot.title,
+            location: slot.location,
+            dateStr,
+            timeStr,
+            acceptUrl: `${appUrl}/invites`,
+          }),
+        })
+      }
+    }
+
+    return NextResponse.json({ id: token, ...inviteData, sentAt: new Date().toISOString() }, { status: 201 })
   }
 
   // Phone-based invite
-  const existingUser = await (prisma as any).user.findUnique({ where: { phone: data.phone } })
-  if (existingUser) {
-    const invite = await (prisma as any).invite.create({
-      data: { gameSlotId: slotId, senderId: session.user.id, recipientId: existingUser.id },
-    })
-    if (existingUser.email) {
+  const phoneSnap = await adminDb
+    .collection('users')
+    .where('phone', '==', data.phone)
+    .limit(1)
+    .get()
+
+  if (!phoneSnap.empty) {
+    // Existing user — treat as user invite
+    const existingUser = phoneSnap.docs[0]
+    const token = adminDb.collection('invites').doc().id
+    const inviteRef = adminDb.collection('invites').doc(token)
+    const inviteData = {
+      gameSlotId: slotId,
+      senderId: session.user.id,
+      senderName: session.user.name,
+      recipientId: existingUser.id,
+      phone: null,
+      status: 'PENDING',
+      token,
+      sentAt: FieldValue.serverTimestamp(),
+      respondedAt: null,
+    }
+    await inviteRef.set(inviteData)
+
+    const userData = existingUser.data()
+    if (userData.email) {
       await sendEmail({
-        to: existingUser.email,
-        subject: `${session.user.name} invited you to play ${slot.sport.name}`,
+        to: userData.email,
+        subject: `${session.user.name} invited you to play ${slot.sportName}`,
         html: inviteEmailHtml({
           senderName: session.user.name,
-          sportName: slot.sport.name,
-          sportIcon: slot.sport.icon,
+          sportName: slot.sportName,
+          sportIcon: slot.sportIcon,
           gameTitle: slot.title,
           location: slot.location,
           dateStr,
@@ -83,15 +122,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ slotId:
         }),
       })
     }
-    return NextResponse.json(invite, { status: 201 })
+
+    return NextResponse.json({ id: token, ...inviteData, sentAt: new Date().toISOString() }, { status: 201 })
   }
 
-  const invite = await (prisma as any).invite.create({
-    data: { gameSlotId: slotId, senderId: session.user.id, phone: data.phone },
-  })
+  // Unknown phone — send SMS with deeplink token
+  const token = adminDb.collection('invites').doc().id
+  const inviteRef = adminDb.collection('invites').doc(token)
+  const inviteData = {
+    gameSlotId: slotId,
+    senderId: session.user.id,
+    senderName: session.user.name,
+    recipientId: null,
+    phone: data.phone,
+    status: 'PENDING',
+    token,
+    sentAt: FieldValue.serverTimestamp(),
+    respondedAt: null,
+  }
+  await inviteRef.set(inviteData)
 
-  const smsBody = `${session.user.name} invited you to play ${slot.sport.name} on ${dateStr} at ${timeStr} – ${slot.location}. Join: ${appUrl}/invite/accept/${invite.token}`
+  const smsBody = `${session.user.name} invited you to play ${slot.sportName} on ${dateStr} at ${timeStr} – ${slot.location}. Join: ${appUrl}/invite/accept/${token}`
   await sendSMS(data.phone, smsBody)
 
-  return NextResponse.json(invite, { status: 201 })
+  return NextResponse.json({ id: token, ...inviteData, sentAt: new Date().toISOString() }, { status: 201 })
 }

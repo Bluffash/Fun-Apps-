@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { firebaseAuth } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,17 +18,19 @@ export function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const res = await signIn('credentials', {
-      email: form.email,
-      password: form.password,
-      redirect: false,
-    })
-    setLoading(false)
-    if (res?.error) {
-      toast({ title: 'Invalid credentials', variant: 'destructive' })
-    } else {
+    try {
+      const { user } = await signInWithEmailAndPassword(firebaseAuth, form.email, form.password)
+      const idToken = await user.getIdToken()
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      })
       router.push('/schedule')
-      router.refresh()
+    } catch {
+      toast({ title: 'Invalid email or password', variant: 'destructive' })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -49,14 +52,14 @@ export function LoginForm() {
         <Input
           id="password"
           type="password"
-          placeholder="••••••••"
+          placeholder="Min 8 characters"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required
         />
       </div>
       <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? 'Signing in…' : 'Sign in'}
+        {loading ? 'Signing in…' : 'Sign In'}
       </Button>
     </form>
   )

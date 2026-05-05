@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { usePathname, useRouter } from 'next/navigation'
+import { signOut } from 'firebase/auth'
+import { firebaseAuth } from '@/lib/firebase'
 import { Calendar, Newspaper, Shield, LogOut, Menu, X, Mail, UserCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -23,7 +24,14 @@ const navLinks = [
 
 export function Navbar({ userName, userRole, pendingInvites = 0 }: NavbarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  async function handleSignOut() {
+    await signOut(firebaseAuth)
+    await fetch('/api/auth/session', { method: 'DELETE' })
+    router.push('/login')
+  }
 
   return (
     <nav className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur">
@@ -87,7 +95,7 @@ export function Navbar({ userName, userRole, pendingInvites = 0 }: NavbarProps) 
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => signOut({ callbackUrl: '/login' })}
+                onClick={handleSignOut}
                 className="text-muted-foreground"
               >
                 <LogOut className="w-4 h-4" />
@@ -154,11 +162,7 @@ export function Navbar({ userName, userRole, pendingInvites = 0 }: NavbarProps) 
                 </Avatar>
                 <span className="text-sm font-medium">{userName}</span>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => signOut({ callbackUrl: '/login' })}
-              >
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-1" /> Sign out
               </Button>
             </div>

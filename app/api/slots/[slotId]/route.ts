@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
+import { Timestamp } from 'firebase-admin/firestore'
 import { UpdateSlotSchema } from '@/lib/validations'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slotId: string }> }) {
@@ -8,17 +9,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slotId:
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { slotId } = await params
 
-  const slot = await (prisma as any).gameSlot.findUnique({
-    where: { id: slotId },
-    include: {
-      sport: true,
-      creator: { select: { id: true, name: true } },
-      rosters: { include: { user: { select: { id: true, name: true } } }, orderBy: { joinedAt: 'asc' } },
-      _count: { select: { messages: true } },
-    },
+  const doc = await adminDb.collection('gameSlots').doc(slotId).get()
+  if (!doc.exists) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const data = doc.data()!
+  const rosterSnap = await adminDb.collection('gameSlots').doc(slotId).collection('rosters').get()
+
+  return NextResponse.json({
+    id: doc.id,
+    ...data,
+    startsAt: data.startsAt?.toDate().toISOString(),
+    endsAt: data.endsAt?.toDate().toISOString(),
+    _count: { rosters: rosterSnap.size },
   })
-  if (!slot) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json(slot)
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ slotId: string }> }) {
@@ -26,9 +29,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ slotId
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { slotId } = await params
 
-  const slot = await (prisma as any).gameSlot.findUnique({ where: { id: slotId } })
-  if (!slot) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const doc = await adminDb.collection('gameSlots').doc(slotId).get()
+  if (!doc.exists) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const slot = doc.data()!
   const canEdit = slot.creatorId === session.user.id || session.user.role === 'ADMIN'
   if (!canEdit) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -36,12 +40,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ slotId
   const parsed = UpdateSlotSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
 
-  const updated = await (prisma as any).gameSlot.update({
-    where: { id: slotId },
-    data: parsed.data,
-    include: { sport: true },
-  })
-  return NextResponse.json(updated)
+  const updates: Record<string, any> = { ...parsed.data }
+  if (parsed.data.startsAt) updates.startsAt = Timestamp.fromDate(new Date(parsed.data.startsAt))
+  if (parsed.data.endsAt) updates.endsAt = Timestamp.fromDate(new Date(parsed.data.endsAt))
+
+  await adminDb.collection('gameSlots').doc(slotId).update(updates)
+  return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ slotId: string }> }) {
@@ -49,12 +53,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ slot
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { slotId } = await params
 
-  const slot = await (prisma as any).gameSlot.findUnique({ where: { id: slotId } })
-  if (!slot) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const doc = await adminDb.collection('gameSlots').doc(slotId).get()
+  if (!doc.exists) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const slot = doc.data()!
   const canDelete = slot.creatorId === session.user.id || session.user.role === 'ADMIN'
   if (!canDelete) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  await (prisma as any).gameSlot.delete({ where: { id: slotId } })
+  await adminDb.collection('gameSlots').doc(slotId).delete()
   return NextResponse.json({ ok: true })
 }

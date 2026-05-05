@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
+import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { CreateSlotSchema } from '@/lib/validations'
-import { startOfDay, addDays } from 'date-fns'
+
+function newId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
 
 export async function GET(req: Request) {
   const session = await auth()
@@ -12,27 +16,35 @@ export async function GET(req: Request) {
   const sportSlug = searchParams.get('sport')
   const weekStart = searchParams.get('weekStart')
 
-  const start = weekStart ? new Date(weekStart) : startOfDay(new Date())
-  const end = addDays(start, 7)
+  const start = weekStart ? new Date(weekStart) : new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-  const where: any = {
-    startsAt: { gte: start, lt: end },
-  }
+  let query = adminDb
+    .collection('gameSlots')
+    .where('startsAt', '>=', Timestamp.fromDate(start))
+    .where('startsAt', '<', Timestamp.fromDate(end))
+    .orderBy('startsAt', 'asc') as FirebaseFirestore.Query
 
   if (sportSlug) {
-    const sport = await (prisma as any).sport.findUnique({ where: { slug: sportSlug } })
-    if (sport) where.sportId = sport.id
+    query = query.where('sportSlug', '==', sportSlug)
   }
 
-  const slots = await (prisma as any).gameSlot.findMany({
-    where,
-    include: {
-      sport: true,
-      creator: { select: { id: true, name: true } },
-      _count: { select: { rosters: true } },
-    },
-    orderBy: { startsAt: 'asc' },
-  })
+  const snap = await query.get()
+
+  const slots = await Promise.all(
+    snap.docs.map(async (doc) => {
+      const data = doc.data()
+      const rosterSnap = await adminDb.collection('gameSlots').doc(doc.id).collection('rosters').get()
+      return {
+        id: doc.id,
+        ...data,
+        startsAt: data.startsAt?.toDate().toISOString(),
+        endsAt: data.endsAt?.toDate().toISOString(),
+        _count: { rosters: rosterSnap.size },
+      }
+    })
+  )
 
   return NextResponse.json(slots)
 }
@@ -52,22 +64,30 @@ export async function POST(req: Request) {
   const endsAt = new Date(parsed.data.endsAt)
   const durationMs = endsAt.getTime() - startsAt.getTime()
 
-  const slots = []
+  const sportDoc = await adminDb.collection('sports').doc(parsed.data.sportId).get()
+  const sport = sportDoc.exists ? sportDoc.data()! : { slug: '', name: '', icon: '' }
+
+  const created = []
   for (let i = 0; i < weeks; i++) {
     const weekStartsAt = new Date(startsAt.getTime() + i * 7 * 24 * 60 * 60 * 1000)
     const weekEndsAt = new Date(weekStartsAt.getTime() + durationMs)
-    const slot = await (prisma as any).gameSlot.create({
-      data: {
-        ...parsed.data,
-        startsAt: weekStartsAt,
-        endsAt: weekEndsAt,
-        repeatWeekly: !!repeatWeekly,
-        creatorId: session.user.id,
-      },
-      include: { sport: true, creator: { select: { id: true, name: true } } },
-    })
-    slots.push(slot)
+    const slotId = newId()
+
+    const slotData = {
+      ...parsed.data,
+      sportSlug: sport.slug ?? '',
+      sportName: sport.name ?? '',
+      sportIcon: sport.icon ?? '',
+      creatorId: session.user.id,
+      creatorName: session.user.name,
+      startsAt: Timestamp.fromDate(weekStartsAt),
+      endsAt: Timestamp.fromDate(weekEndsAt),
+      repeatWeekly: !!repeatWeekly,
+      createdAt: FieldValue.serverTimestamp(),
+    }
+    await adminDb.collection('gameSlots').doc(slotId).set(slotData)
+    created.push({ id: slotId, ...slotData, startsAt: weekStartsAt.toISOString(), endsAt: weekEndsAt.toISOString() })
   }
 
-  return NextResponse.json(weeks > 1 ? slots : slots[0], { status: 201 })
+  return NextResponse.json(weeks > 1 ? created : created[0], { status: 201 })
 }

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { firebaseAuth } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,20 +17,37 @@ export function RegisterForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (form.name.length < 2) {
+      toast({ title: 'Name must be at least 2 characters', variant: 'destructive' })
+      return
+    }
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/register', {
+      const { user } = await createUserWithEmailAndPassword(firebaseAuth, form.email, form.password)
+      await updateProfile(user, { displayName: form.name })
+
+      // Create user document in Firestore
+      await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ name: form.name, phone: form.phone || null }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        toast({ title: data.error ?? 'Registration failed', variant: 'destructive' })
-        return
-      }
-      await signIn('credentials', { email: form.email, password: form.password, redirect: false })
+
+      const idToken = await user.getIdToken()
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      })
       router.push('/onboarding')
+    } catch (err: any) {
+      const msg =
+        err.code === 'auth/email-already-in-use'
+          ? 'Email already registered'
+          : err.code === 'auth/weak-password'
+            ? 'Password must be at least 6 characters'
+            : 'Registration failed'
+      toast({ title: msg, variant: 'destructive' })
     } finally {
       setLoading(false)
     }

@@ -1,45 +1,35 @@
-import NextAuth from 'next-auth'
-import Credentials from 'next-auth/providers/credentials'
-import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
+import { cookies } from 'next/headers'
+import { adminAuth, adminDb } from './firebase-admin'
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: 'jwt' },
-  providers: [
-    Credentials({
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+export interface AppSession {
+  user: {
+    id: string
+    name: string
+    email: string
+    role: string
+  }
+}
+
+export async function auth(): Promise<AppSession | null> {
+  try {
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('__session')?.value
+    if (!sessionCookie) return null
+
+    const decoded = await adminAuth.verifySessionCookie(sessionCookie, true)
+    const userDoc = await adminDb.collection('users').doc(decoded.uid).get()
+    if (!userDoc.exists) return null
+
+    const data = userDoc.data()!
+    return {
+      user: {
+        id: decoded.uid,
+        name: data.name ?? '',
+        email: data.email ?? '',
+        role: data.role ?? 'USER',
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        })
-        if (!user) return null
-        const valid = await bcrypt.compare(credentials.password as string, user.passwordHash)
-        if (!valid) return null
-        return { id: user.id, name: user.name, email: user.email, role: user.role }
-      },
-    }),
-  ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-        token.role = (user as { role?: string }).role ?? 'USER'
-      }
-      return token
-    },
-    session({ session, token }) {
-      if (token) {
-        session.user.id = token.id as string
-        session.user.role = token.role as string
-      }
-      return session
-    },
-  },
-  pages: {
-    signIn: '/login',
-  },
-})
+    }
+  } catch {
+    return null
+  }
+}

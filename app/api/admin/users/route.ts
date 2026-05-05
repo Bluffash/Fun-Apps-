@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { adminDb } from '@/lib/firebase-admin'
+import { Timestamp } from 'firebase-admin/firestore'
 
 export async function GET() {
   const session = await auth()
@@ -8,17 +9,22 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const users = await (prisma as any).user.findMany({
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      role: true,
-      createdAt: true,
-      _count: { select: { gameRosters: true, createdSlots: true } },
-    },
-    orderBy: { createdAt: 'asc' },
+  const snap = await adminDb.collection('users').orderBy('createdAt', 'asc').get()
+
+  const users = snap.docs.map((doc) => {
+    const data = doc.data()
+    return {
+      id: doc.id,
+      name: data.name ?? '',
+      email: data.email ?? '',
+      phone: data.phone ?? null,
+      role: data.role ?? 'USER',
+      createdAt: data.createdAt instanceof Timestamp
+        ? data.createdAt.toDate().toISOString()
+        : data.createdAt ?? null,
+      // Cross-collection counts require extra queries per user — returning 0 for now
+      _count: { gameRosters: 0 },
+    }
   })
 
   return NextResponse.json(users)
