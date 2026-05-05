@@ -1,0 +1,68 @@
+# Firebase App Hosting config
+# https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  # Public Firebase client config (safe to expose, baked into client bundle)
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyARwYkpDd9KDdLV0gUP09JFx4JIjNavkJA
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: my-claude-build.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: my-claude-build
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: my-claude-build.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "585684036064"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:585684036064:web:32ec0b2b85b0a36ca7e385
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_APP_URL
+    value: https://my-claude-build.web.app
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Firebase Admin SDK — App Hosting auto-injects credentials at runtime
+  # via the default service account, so explicit project ID is enough here.
+  - variable: FIREBASE_ADMIN_PROJECT_ID
+    value: my-claude-build
+    availability:
+      - RUNTIME
+
+  # Sensitive credentials — store as secrets, then reference here.
+  # Run BEFORE deploying:
+  #   firebase apphosting:secrets:set FIREBASE_ADMIN_CLIENT_EMAIL
+  #   firebase apphosting:secrets:set FIREBASE_ADMIN_PRIVATE_KEY
+  # (Optional, only if SMS / email features are used:)
+  #   firebase apphosting:secrets:set TWILIO_ACCOUNT_SID
+  #   firebase apphosting:secrets:set TWILIO_AUTH_TOKEN
+  #   firebase apphosting:secrets:set TWILIO_PHONE_NUMBER
+  #   firebase apphosting:secrets:set RESEND_API_KEY
+  - variable: FIREBASE_ADMIN_CLIENT_EMAIL
+    secret: FIREBASE_ADMIN_CLIENT_EMAIL
+  - variable: FIREBASE_ADMIN_PRIVATE_KEY
+    secret: FIREBASE_ADMIN_PRIVATE_KEY
