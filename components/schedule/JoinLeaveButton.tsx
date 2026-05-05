@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
-import { useSWRConfig } from 'swr'
+import { useRouter } from 'next/navigation'
 
 interface JoinLeaveButtonProps {
   slotId: string
@@ -11,10 +11,12 @@ interface JoinLeaveButtonProps {
   isFull: boolean
 }
 
-export function JoinLeaveButton({ slotId, isJoined, isFull }: JoinLeaveButtonProps) {
+export function JoinLeaveButton({ slotId, isJoined: initialJoined, isFull: initialFull }: JoinLeaveButtonProps) {
   const [loading, setLoading] = useState(false)
+  const [isJoined, setIsJoined] = useState(initialJoined)
+  const [isFull, setIsFull] = useState(initialFull)
   const { toast } = useToast()
-  const { mutate } = useSWRConfig()
+  const router = useRouter()
 
   async function toggle() {
     setLoading(true)
@@ -23,9 +25,11 @@ export function JoinLeaveButton({ slotId, isJoined, isFull }: JoinLeaveButtonPro
     setLoading(false)
 
     if (res.ok) {
-      mutate(`/api/slots/${slotId}`)
-      mutate(`/api/slots/${slotId}/roster`)
+      const nowJoined = !isJoined
+      setIsJoined(nowJoined)
+      if (!nowJoined) setIsFull(false)
       toast({ title: isJoined ? 'Left the game' : 'Joined the game!' })
+      router.refresh()
     } else {
       const data = await res.json()
       toast({ title: data.error ?? 'Something went wrong', variant: 'destructive' })

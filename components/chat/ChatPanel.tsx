@@ -101,16 +101,6 @@ export function ChatPanel({ slotId, currentUserId, isAdmin = false }: ChatPanelP
                 <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col`}>
                   {!isOwn && <span className="text-xs text-muted-foreground mb-0.5">{msg.user.name}</span>}
                   <div className="flex items-end gap-1">
-                    {isOwn && canFlag && (
-                      <button
-                        onClick={() => handleFlag(msg.id, !msg.flagged)}
-                        disabled={flagging === msg.id}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:text-destructive"
-                        title={msg.flagged ? 'Unflag' : 'Flag message'}
-                      >
-                        <Flag className={`w-3 h-3 ${msg.flagged ? 'text-destructive fill-destructive' : 'text-muted-foreground'}`} />
-                      </button>
-                    )}
                     <div className={`px-3 py-1.5 rounded-2xl text-sm ${
                       msg.flagged
                         ? 'bg-destructive/10 border border-destructive/30'
