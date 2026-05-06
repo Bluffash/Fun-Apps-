@@ -19,8 +19,9 @@ export async function POST(req: Request) {
       sameSite: 'lax',
     })
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  } catch (err: any) {
+    console.error('[session] createSessionCookie failed:', err?.message ?? err)
+    return NextResponse.json({ error: err?.message ?? 'Invalid token' }, { status: 401 })
   }
 }
 
