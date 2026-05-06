@@ -53,16 +53,5 @@ env:
     availability:
       - RUNTIME
 
-  # Sensitive credentials — store as secrets, then reference here.
-  # Run BEFORE deploying:
-  #   firebase apphosting:secrets:set FIREBASE_ADMIN_CLIENT_EMAIL
-  #   firebase apphosting:secrets:set FIREBASE_ADMIN_PRIVATE_KEY
-  # (Optional, only if SMS / email features are used:)
-  #   firebase apphosting:secrets:set TWILIO_ACCOUNT_SID
-  #   firebase apphosting:secrets:set TWILIO_AUTH_TOKEN
-  #   firebase apphosting:secrets:set TWILIO_PHONE_NUMBER
-  #   firebase apphosting:secrets:set RESEND_API_KEY
-  - variable: FIREBASE_ADMIN_CLIENT_EMAIL
-    secret: FIREBASE_ADMIN_CLIENT_EMAIL
-  - variable: FIREBASE_ADMIN_PRIVATE_KEY
-    secret: FIREBASE_ADMIN_PRIVATE_KEY
+  # FIREBASE_ADMIN_CLIENT_EMAIL and FIREBASE_ADMIN_PRIVATE_KEY are NOT
+  # needed on App Hosting — ADC credentials are injected automatically.
