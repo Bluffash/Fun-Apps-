@@ -21,14 +21,25 @@ export function LoginForm() {
     try {
       const { user } = await signInWithEmailAndPassword(firebaseAuth, form.email, form.password)
       const idToken = await user.getIdToken()
-      await fetch('/api/auth/session', {
+      const res = await fetch('/api/auth/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(`Session failed: ${res.status} ${data.error ?? ''}`)
+      }
       router.push('/schedule')
-    } catch {
-      toast({ title: 'Invalid email or password', variant: 'destructive' })
+    } catch (err: any) {
+      console.error('Login error:', err)
+      const msg =
+        err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found'
+          ? 'Invalid email or password'
+          : err.code === 'auth/too-many-requests'
+            ? 'Too many attempts. Try again later.'
+            : err.message ?? 'Login failed'
+      toast({ title: msg, variant: 'destructive' })
     } finally {
       setLoading(false)
     }
