@@ -41,7 +41,7 @@ env:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_APP_URL
-    value: https://my-claude-build.web.app
+    value: https://fun-apps--my-claude-build.us-central1.hosted.app
     availability:
       - BUILD
       - RUNTIME
@@ -55,3 +55,25 @@ env:
 
   # FIREBASE_ADMIN_CLIENT_EMAIL and FIREBASE_ADMIN_PRIVATE_KEY are NOT
   # needed on App Hosting — ADC credentials are injected automatically.
+
+  # Public VAPID key — exposed to client for push subscription, but stored
+  # as a secret so it stays per-environment.
+  - variable: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    secret: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Server-only secrets — runtime only, never exposed to the client bundle.
+  - variable: VAPID_PRIVATE_KEY
+    secret: VAPID_PRIVATE_KEY
+    availability:
+      - RUNTIME
+  - variable: VAPID_EMAIL
+    secret: VAPID_EMAIL
+    availability:
+      - RUNTIME
+  - variable: CRICKET_API_KEY
+    secret: CRICKET_API_KEY
+    availability:
+      - RUNTIME
