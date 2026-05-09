@@ -86,34 +86,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
   const inviteDoc = inviteSnap.docs[0]
   const invite = inviteDoc.data()
 
+  // Only PENDING invites can transition. Once ACCEPTED/DECLINED, the token is spent.
+  if (invite.status && invite.status !== 'PENDING') {
+    return NextResponse.json({ error: 'This invite has already been responded to' }, { status: 409 })
+  }
+
+  // If the invite was sent to a specific user, only that user can accept/decline.
+  // Phone-based invites have recipientId === null and are claimed by the first signed-in user.
+  if (invite.recipientId && invite.recipientId !== session.user.id) {
+    return NextResponse.json({ error: 'This invite is for a different user' }, { status: 403 })
+  }
+
   if (status === 'ACCEPTED') {
-    const slotDoc = await adminDb.collection('gameSlots').doc(invite.gameSlotId).get()
-    if (!slotDoc.exists) {
-      return NextResponse.json({ error: 'Game slot not found' }, { status: 404 })
-    }
-    const slot = slotDoc.data()!
+    const slotRef = adminDb.collection('gameSlots').doc(invite.gameSlotId)
+    try {
+      await adminDb.runTransaction(async (tx) => {
+        const slotSnap = await tx.get(slotRef)
+        if (!slotSnap.exists) throw new Error('SLOT_NOT_FOUND')
+        const slot = slotSnap.data()!
 
-    const rosterSnap = await adminDb
-      .collection('gameSlots')
-      .doc(invite.gameSlotId)
-      .collection('rosters')
-      .get()
+        const startsAt: Date = slot.startsAt?.toDate?.() ?? new Date(slot.startsAt)
+        if (startsAt.getTime() < Date.now()) throw new Error('PAST_GAME')
 
-    if (rosterSnap.size >= slot.capacity) {
-      return NextResponse.json({ error: 'Game is now full' }, { status: 409 })
-    }
-
-    // Add user to roster
-    await adminDb
-      .collection('gameSlots')
-      .doc(invite.gameSlotId)
-      .collection('rosters')
-      .doc(session.user.id)
-      .set({
-        userId: session.user.id,
-        userName: session.user.name,
-        joinedAt: FieldValue.serverTimestamp(),
+        const memberRef = slotRef.collection('rosters').doc(session.user.id)
+        const memberSnap = await tx.get(memberRef)
+        if (!memberSnap.exists) {
+          const rosterSnap = await tx.get(slotRef.collection('rosters'))
+          if (rosterSnap.size >= slot.capacity) throw new Error('FULL')
+          tx.set(memberRef, {
+            userId: session.user.id,
+            userName: session.user.name,
+            joinedAt: FieldValue.serverTimestamp(),
+          })
+        }
       })
+    } catch (e: any) {
+      const code = e?.message
+      if (code === 'SLOT_NOT_FOUND') return NextResponse.json({ error: 'Game slot not found' }, { status: 404 })
+      if (code === 'PAST_GAME') return NextResponse.json({ error: 'This game has already started' }, { status: 409 })
+      if (code === 'FULL') return NextResponse.json({ error: 'Game is now full' }, { status: 409 })
+      console.error('Invite accept error:', e)
+      return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    }
   }
 
   // Update invite status and respondedAt

@@ -21,6 +21,7 @@ export async function auth(): Promise<AppSession | null> {
     if (!userDoc.exists) return null
 
     const data = userDoc.data()!
+    if (data.blocked) return null
     return {
       user: {
         id: decoded.uid,

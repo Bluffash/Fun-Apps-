@@ -16,7 +16,7 @@ export const LoginSchema = z.object({
   password: z.string().min(1),
 })
 
-export const CreateSlotSchema = z.object({
+const SlotShape = z.object({
   sportId: z.string().min(1, 'Sport is required'),
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().optional(),
@@ -26,7 +26,23 @@ export const CreateSlotSchema = z.object({
   capacity: z.number().int().min(2).max(100),
 })
 
-export const UpdateSlotSchema = CreateSlotSchema.partial()
+export const CreateSlotSchema = SlotShape.refine(
+  (d) => new Date(d.endsAt).getTime() > new Date(d.startsAt).getTime(),
+  { message: 'End time must be after start time', path: ['endsAt'] }
+)
+
+// Partials skip the cross-field refine — that's fine since updates may send only one field.
+export const UpdateSlotSchema = SlotShape.partial()
+
+export const UpdateProfileSchema = z.object({
+  name: z.string().trim().min(2).max(80).optional(),
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{7,14}$/)
+    .or(z.literal(''))
+    .nullable()
+    .optional(),
+})
 
 export const SendInviteSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('user'), recipientId: z.string().min(1) }),
@@ -40,8 +56,10 @@ export const SendMessageSchema = z.object({
   body: z.string().min(1).max(1000),
 })
 
+// Note: kept loose at the schema level — the route validates against the SPORTS list
+// at runtime so that adding a new sport doesn't require a schema rebuild.
 export const UpdateSportsSchema = z.object({
-  sportIds: z.array(z.string()),
+  sportIds: z.array(z.string()).max(50),
 })
 
 export const UpdateFeedSchema = z.object({

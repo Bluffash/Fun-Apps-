@@ -3,6 +3,41 @@ import { auth } from '@/lib/auth'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { CreateSlotSchema } from '@/lib/validations'
+import { SPORTS } from '@/lib/constants'
+import { webpush } from '@/lib/web-push'
+
+async function notifyInterestedUsers(sportSlug: string, sportName: string, sportIcon: string, slotId: string, title: string) {
+  try {
+    const usersSnap = await adminDb.collection('users').where('sportIds', 'array-contains', sportSlug).get()
+    const payload = JSON.stringify({
+      title: `${sportIcon} New ${sportName} game!`,
+      body: title,
+      url: `/schedule/${slotId}`,
+    })
+    await Promise.allSettled(
+      usersSnap.docs.flatMap(async (userDoc) => {
+        const subsSnap = await adminDb
+          .collection('users').doc(userDoc.id)
+          .collection('pushSubscriptions').get()
+        return Promise.allSettled(
+          subsSnap.docs.map(async (subDoc) => {
+            const { subscription } = subDoc.data()
+            try {
+              await webpush.sendNotification(subscription, payload)
+            } catch (err: any) {
+              // 404/410 = subscription gone; clean it up.
+              if (err?.statusCode === 404 || err?.statusCode === 410) {
+                await subDoc.ref.delete().catch(() => {})
+              }
+            }
+          })
+        )
+      })
+    )
+  } catch {
+    // Non-critical — don't fail the slot creation
+  }
+}
 
 function newId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -38,9 +73,15 @@ export async function GET(req: Request) {
       const rosterSnap = await adminDb.collection('gameSlots').doc(doc.id).collection('rosters').get()
       return {
         id: doc.id,
-        ...data,
+        title: data.title,
+        location: data.location,
+        capacity: data.capacity,
+        sportSlug: data.sportSlug,
+        sport: { name: data.sportName ?? '', icon: data.sportIcon ?? '' },
         startsAt: data.startsAt?.toDate().toISOString(),
         endsAt: data.endsAt?.toDate().toISOString(),
+        creatorId: data.creatorId,
+        creatorName: data.creatorName,
         _count: { rosters: rosterSnap.size },
       }
     })
@@ -64,8 +105,7 @@ export async function POST(req: Request) {
   const endsAt = new Date(parsed.data.endsAt)
   const durationMs = endsAt.getTime() - startsAt.getTime()
 
-  const sportDoc = await adminDb.collection('sports').doc(parsed.data.sportId).get()
-  const sport = sportDoc.exists ? sportDoc.data()! : { slug: '', name: '', icon: '' }
+  const sport = SPORTS.find((s) => s.slug === parsed.data.sportId) ?? { slug: '', name: '', icon: '' }
 
   const created = []
   for (let i = 0; i < weeks; i++) {
@@ -87,6 +127,10 @@ export async function POST(req: Request) {
     }
     await adminDb.collection('gameSlots').doc(slotId).set(slotData)
     created.push({ id: slotId, ...slotData, startsAt: weekStartsAt.toISOString(), endsAt: weekEndsAt.toISOString() })
+    // Notify on first occurrence only
+    if (i === 0) {
+      notifyInterestedUsers(sport.slug, sport.name, sport.icon, slotId, parsed.data.title)
+    }
   }
 
   return NextResponse.json(weeks > 1 ? created : created[0], { status: 201 })

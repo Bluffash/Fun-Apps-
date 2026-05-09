@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { firebaseAuth } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
@@ -14,9 +14,12 @@ export function LoginForm() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ email: '', password: '' })
+  const submitting = useRef(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitting.current) return
+    submitting.current = true
     setLoading(true)
     try {
       const { user } = await signInWithEmailAndPassword(firebaseAuth, form.email, form.password)
@@ -26,6 +29,10 @@ export function LoginForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       })
+      if (res.status === 403) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? 'Account blocked')
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(`Session failed: ${res.status} ${data.error ?? ''}`)
@@ -42,31 +49,39 @@ export function LoginForm() {
       toast({ title: msg, variant: 'destructive' })
     } finally {
       setLoading(false)
+      submitting.current = false
     }
   }
+
+  const inputClass = 'bg-white/10 border-white/20 text-white placeholder:text-white/40 focus-visible:ring-primary'
+  const labelClass = 'text-white/80'
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email" className={labelClass}>Email</Label>
         <Input
           id="email"
           type="email"
+          autoComplete="email"
           placeholder="you@example.com"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
           required
+          className={inputClass}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password" className={labelClass}>Password</Label>
         <Input
           id="password"
           type="password"
+          autoComplete="current-password"
           placeholder="Min 8 characters"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required
+          className={inputClass}
         />
       </div>
       <Button type="submit" className="w-full" disabled={loading}>

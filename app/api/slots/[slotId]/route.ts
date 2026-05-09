@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { UpdateSlotSchema } from '@/lib/validations'
+import { SPORTS } from '@/lib/constants'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slotId: string }> }) {
   const session = await auth()
@@ -43,6 +44,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ slotId
   const updates: Record<string, any> = { ...parsed.data }
   if (parsed.data.startsAt) updates.startsAt = Timestamp.fromDate(new Date(parsed.data.startsAt))
   if (parsed.data.endsAt) updates.endsAt = Timestamp.fromDate(new Date(parsed.data.endsAt))
+  if (parsed.data.sportId) {
+    const sport = SPORTS.find((s) => s.slug === parsed.data.sportId) ?? { slug: '', name: '', icon: '' }
+    updates.sportSlug = sport.slug
+    updates.sportName = sport.name
+    updates.sportIcon = sport.icon
+  }
 
   await adminDb.collection('gameSlots').doc(slotId).update(updates)
   return NextResponse.json({ ok: true })

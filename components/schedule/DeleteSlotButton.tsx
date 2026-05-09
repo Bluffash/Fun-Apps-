@@ -6,7 +6,7 @@ import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 
-export function DeleteSlotButton({ slotId }: { slotId: string }) {
+export function DeleteSlotButton({ slotId, redirectTo }: { slotId: string; redirectTo?: string }) {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -18,7 +18,11 @@ export function DeleteSlotButton({ slotId }: { slotId: string }) {
     setLoading(false)
     if (res.ok) {
       toast({ title: 'Game deleted' })
-      router.push('/schedule')
+      if (redirectTo) {
+        router.push(redirectTo)
+      } else {
+        router.refresh()
+      }
     } else {
       toast({ title: 'Failed to delete', variant: 'destructive' })
     }

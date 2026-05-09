@@ -32,8 +32,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slotId:
     const data = doc.data()
     return {
       id: doc.id,
-      ...data,
+      body: data.body,
+      flagged: data.flagged ?? false,
       createdAt: data.createdAt?.toDate().toISOString() ?? new Date().toISOString(),
+      user: { id: data.userId, name: data.userName ?? 'Unknown' },
     }
   })
 

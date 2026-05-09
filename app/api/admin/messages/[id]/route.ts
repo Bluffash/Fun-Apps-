@@ -30,13 +30,24 @@ export async function PATCH(
     return NextResponse.json({ error: 'flagged must be a boolean' }, { status: 400 })
   }
 
-  // Only admins can unflag
-  if (flagged === false && session.user.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
   const msgDoc = await findMessageDoc(id)
   if (!msgDoc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Admins can flag/unflag anything. Non-admins must be on the roster of the
+  // message's slot, and can only flag (not unflag).
+  if (session.user.role !== 'ADMIN') {
+    if (flagged === false) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const slotId = msgDoc.data()?.slotId
+    if (!slotId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const memberSnap = await adminDb
+      .collection('gameSlots').doc(slotId)
+      .collection('rosters').doc(session.user.id).get()
+    if (!memberSnap.exists) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
 
   await msgDoc.ref.update({ flagged })
 

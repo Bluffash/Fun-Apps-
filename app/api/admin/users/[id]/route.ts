@@ -11,11 +11,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const { id } = await params
-  const { role } = await req.json()
-
-  if (role !== 'ADMIN' && role !== 'USER') {
-    return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
-  }
+  const body = await req.json()
 
   const userRef = adminDb.collection('users').doc(id)
   const userDoc = await userRef.get()
@@ -23,10 +19,28 @@ export async function PATCH(
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
-  await userRef.update({ role })
+  if ('role' in body) {
+    if (body.role !== 'ADMIN' && body.role !== 'USER') {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
+    await userRef.update({ role: body.role })
+  }
 
-  const updated = userDoc.data()!
-  return NextResponse.json({ id, name: updated.name ?? '', role })
+  if ('blocked' in body) {
+    if (id === session.user.id) {
+      return NextResponse.json({ error: 'Cannot block your own account' }, { status: 400 })
+    }
+    const blocked = !!body.blocked
+    await userRef.update({ blocked })
+    // Revoke active Firebase sessions so the block takes effect immediately,
+    // not just on next session-cookie expiry.
+    if (blocked) {
+      try { await adminAuth.revokeRefreshTokens(id) } catch (e) { console.error('revokeRefreshTokens failed:', e) }
+    }
+  }
+
+  const updated = (await userRef.get()).data()!
+  return NextResponse.json({ id, name: updated.name ?? '', role: updated.role, blocked: updated.blocked ?? false })
 }
 
 export async function DELETE(

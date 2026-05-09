@@ -4,14 +4,16 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 interface JoinLeaveButtonProps {
   slotId: string
   isJoined: boolean
   isFull: boolean
+  hasInterest?: boolean
 }
 
-export function JoinLeaveButton({ slotId, isJoined: initialJoined, isFull: initialFull }: JoinLeaveButtonProps) {
+export function JoinLeaveButton({ slotId, isJoined: initialJoined, isFull: initialFull, hasInterest = true }: JoinLeaveButtonProps) {
   const [loading, setLoading] = useState(false)
   const [isJoined, setIsJoined] = useState(initialJoined)
   const [isFull, setIsFull] = useState(initialFull)
@@ -34,6 +36,17 @@ export function JoinLeaveButton({ slotId, isJoined: initialJoined, isFull: initi
       const data = await res.json()
       toast({ title: data.error ?? 'Something went wrong', variant: 'destructive' })
     }
+  }
+
+  if (!isJoined && !hasInterest) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <Button disabled variant="secondary">Join Game</Button>
+        <Link href="/profile" className="text-xs text-primary hover:underline">
+          Add this sport in your profile to join
+        </Link>
+      </div>
+    )
   }
 
   if (!isJoined && isFull) {
