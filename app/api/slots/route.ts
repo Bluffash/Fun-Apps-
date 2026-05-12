@@ -80,6 +80,7 @@ export async function GET(req: Request) {
         sport: { name: data.sportName ?? '', icon: data.sportIcon ?? '' },
         startsAt: data.startsAt?.toDate().toISOString(),
         endsAt: data.endsAt?.toDate().toISOString(),
+        timezone: data.timezone ?? null,
         creatorId: data.creatorId,
         creatorName: data.creatorName,
         _count: { rosters: rosterSnap.size },

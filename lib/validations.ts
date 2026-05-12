@@ -24,6 +24,9 @@ const SlotShape = z.object({
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime(),
   capacity: z.number().int().min(2).max(100),
+  // IANA timezone (e.g. "America/Chicago") captured from the creator's browser
+  // so we can render times in the game's local zone, not the viewer's.
+  timezone: z.string().min(1).max(64).optional(),
 })
 
 export const CreateSlotSchema = SlotShape.refine(

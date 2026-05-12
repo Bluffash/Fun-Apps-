@@ -1,19 +1,19 @@
 import { Wind, Droplets, Thermometer } from 'lucide-react'
 import type { WeatherForecast } from '@/lib/weather'
+import { GameTime } from './GameTime'
 
 interface WeatherWidgetProps {
   weather: WeatherForecast
   gameTime: Date
+  timezone?: string | null
 }
 
-export function WeatherWidget({ weather, gameTime }: WeatherWidgetProps) {
-  const timeLabel = gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-
+export function WeatherWidget({ weather, gameTime, timezone }: WeatherWidgetProps) {
   return (
     <div className="rounded-xl border bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-950/30 dark:to-blue-950/30 p-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Weather at game time · {timeLabel}
+          Weather at game time · <GameTime iso={gameTime} timezone={timezone} format="h:mm a" />
         </span>
         <span className="text-xs text-muted-foreground">Forecast</span>
       </div>

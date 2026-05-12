@@ -2,7 +2,7 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { formatDate, formatTime } from '@/lib/utils'
+import { GameTime } from '@/components/schedule/GameTime'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -45,7 +45,11 @@ export default async function AdminSlotsPage() {
               <div className="min-w-0">
                 <div className="font-medium truncate">{(slot as any).title}</div>
                 <div className="text-xs text-muted-foreground">
-                  {formatDate(slot.startsAt, 'EEE, MMM d')} · {formatTime(slot.startsAt)} · {(slot as any).location}
+                  <GameTime iso={slot.startsAt} timezone={(slot as any).timezone} format="EEE, MMM d" />
+                  {' · '}
+                  <GameTime iso={slot.startsAt} timezone={(slot as any).timezone} format="h:mm a" />
+                  {' · '}
+                  {(slot as any).location}
                 </div>
                 <div className="text-xs text-muted-foreground">by {(slot as any).creatorName}</div>
               </div>

@@ -2,7 +2,7 @@ import { auth } from '@/lib/auth'
 import { notFound } from 'next/navigation'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { formatDate, formatTime } from '@/lib/utils'
+import { GameTime } from '@/components/schedule/GameTime'
 import { MapPin, Clock, Calendar } from 'lucide-react'
 import { InviteAcceptClient } from './InviteAcceptClient'
 
@@ -42,11 +42,13 @@ export default async function InviteAcceptPage({ params }: { params: Promise<{ t
           {slot.description && <p className="text-sm text-muted-foreground">{slot.description}</p>}
           <div className="flex items-center gap-2 text-sm">
             <Calendar className="w-4 h-4 text-muted-foreground" />
-            {formatDate(startsAt, 'EEEE, MMMM d, yyyy')}
+            <GameTime iso={startsAt} timezone={(slot.timezone as string | undefined) ?? null} format="EEEE, MMMM d, yyyy" />
           </div>
           <div className="flex items-center gap-2 text-sm">
             <Clock className="w-4 h-4 text-muted-foreground" />
-            {formatTime(startsAt)} – {formatTime(endsAt)}
+            <GameTime iso={startsAt} timezone={(slot.timezone as string | undefined) ?? null} format="h:mm a" />
+            {' – '}
+            <GameTime iso={endsAt} timezone={(slot.timezone as string | undefined) ?? null} format="h:mm a" />
           </div>
           <div className="flex items-center gap-2 text-sm">
             <MapPin className="w-4 h-4 text-muted-foreground" />
