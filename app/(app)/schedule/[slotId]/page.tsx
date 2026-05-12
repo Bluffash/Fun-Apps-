@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect, notFound } from 'next/navigation'
 import { adminDb } from '@/lib/firebase-admin'
-import { formatDate, formatTime } from '@/lib/utils'
+import { GameTime } from '@/components/schedule/GameTime'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { MapPin, Clock, Calendar, Edit } from 'lucide-react'
@@ -89,7 +89,7 @@ export default async function SlotDetailPage({ params }: { params: Promise<{ slo
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Date</div>
-                <div className="text-sm font-semibold truncate">{formatDate(startsAt, 'EEE, MMM d')}</div>
+                <div className="text-sm font-semibold truncate"><GameTime iso={startsAt} timezone={(slot as any).timezone} format="EEE, MMM d" /></div>
               </div>
             </div>
             <div className="flex items-center gap-2.5">
@@ -98,7 +98,11 @@ export default async function SlotDetailPage({ params }: { params: Promise<{ slo
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Time</div>
-                <div className="text-sm font-semibold truncate">{formatTime(startsAt)} – {formatTime(endsAt)}</div>
+                <div className="text-sm font-semibold truncate">
+                  <GameTime iso={startsAt} timezone={(slot as any).timezone} format="h:mm a" />
+                  {' – '}
+                  <GameTime iso={endsAt} timezone={(slot as any).timezone} format="h:mm a" />
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2.5">
@@ -114,7 +118,7 @@ export default async function SlotDetailPage({ params }: { params: Promise<{ slo
         </div>
       </div>
 
-      {weather && <WeatherWidget weather={weather} gameTime={startsAt} />}
+      {weather && <WeatherWidget weather={weather} gameTime={startsAt} timezone={(slot as any).timezone} />}
 
       <MapEmbed location={(slot as any).location} />
       <Separator />

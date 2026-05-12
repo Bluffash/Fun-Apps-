@@ -2,7 +2,7 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { formatDate, formatTime } from '@/lib/utils'
+import { GameTime } from '@/components/schedule/GameTime'
 import { InviteActions } from './InviteActions'
 import { Badge } from '@/components/ui/badge'
 import { MapPin, Clock, Calendar, Users } from 'lucide-react'
@@ -39,6 +39,7 @@ export default async function InvitesPage() {
               sportIcon: slot.sportIcon,
               sportName: slot.sportName,
               startsAt: slot.startsAt instanceof Timestamp ? slot.startsAt.toDate() : new Date(slot.startsAt),
+              timezone: (slot.timezone as string | undefined) ?? null,
               capacity: slot.capacity,
               rosterCount: rosterSnap?.size ?? 0,
             }
@@ -88,11 +89,11 @@ export default async function InvitesPage() {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Calendar className="w-4 h-4 shrink-0" />
-                    <span>{formatDate(slot.startsAt, 'EEE, MMM d')}</span>
+                    <span><GameTime iso={slot.startsAt} timezone={slot.timezone} format="EEE, MMM d" /></span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Clock className="w-4 h-4 shrink-0" />
-                    <span>{formatTime(slot.startsAt)}</span>
+                    <span><GameTime iso={slot.startsAt} timezone={slot.timezone} format="h:mm a" /></span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="w-4 h-4 shrink-0" />

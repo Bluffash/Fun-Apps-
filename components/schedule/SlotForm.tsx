@@ -62,7 +62,7 @@ export function SlotForm({ sports, initial }: SlotFormProps) {
     e.preventDefault()
     setLoading(true)
 
-    const body = {
+    const body: Record<string, unknown> = {
       sportId: form.sportId,
       title: form.title,
       description: form.description,
@@ -72,6 +72,11 @@ export function SlotForm({ sports, initial }: SlotFormProps) {
       capacity: Number(form.capacity),
       repeatWeekly: form.repeatWeekly,
       repeatWeeks: form.repeatWeekly ? Number(form.repeatWeeks) : 1,
+    }
+    // Only stamp timezone on create — preserve the original on edit so a Pacific-time admin
+    // editing a Central-time game doesn't accidentally flip the displayed zone.
+    if (!isEdit) {
+      body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
     }
 
     const url = isEdit ? `/api/slots/${initial!.id}` : '/api/slots'

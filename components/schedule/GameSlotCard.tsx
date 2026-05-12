@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { MapPin, Clock, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { formatTime } from '@/lib/utils'
+import { GameTime } from './GameTime'
 import { SPORTS } from '@/lib/constants'
 
 interface GameSlotCardProps {
@@ -14,6 +14,7 @@ interface GameSlotCardProps {
     capacity: number
     sport: { name: string; icon: string }
     sportSlug?: string
+    timezone?: string | null
     _count: { rosters: number }
   }
 }
@@ -56,7 +57,11 @@ export function GameSlotCard({ slot }: GameSlotCardProps) {
           <div className="space-y-1.5 mb-3">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Clock className="w-3 h-3 shrink-0 text-primary/60" />
-              <span className="font-medium">{formatTime(slot.startsAt)} – {formatTime(slot.endsAt)}</span>
+              <span className="font-medium">
+                <GameTime iso={slot.startsAt} timezone={slot.timezone} format="h:mm a" />
+                {' – '}
+                <GameTime iso={slot.endsAt} timezone={slot.timezone} format="h:mm a" />
+              </span>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <MapPin className="w-3 h-3 shrink-0 text-primary/60" />
