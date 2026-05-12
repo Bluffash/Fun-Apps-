@@ -12,10 +12,12 @@ SportsPick is a mobile-first, full-stack web app for organizing pick-up sports g
 
 | Question | Answer |
 |---|---|
-| Method | Email + password (bcryptjs, 12 rounds) |
-| Session | JWT — no extra DB hit on every request |
+| Method | Firebase Auth (email + password); user profile/role stored in Firestore `users/{uid}` |
+| Session | Firebase Auth ID token exchanged for an HTTP-only `__session` cookie via `/api/auth/session` (14-day expiry); verified server-side with `adminAuth.verifySessionCookie` |
+| Route protection | `middleware.ts` redirects unauthenticated visitors to `/login` for `/schedule`, `/feed`, `/admin`, `/onboarding`, `/invites`, `/profile` |
 | After login | Redirected to `/schedule` (the main screen) |
 | First-time user | After signup, redirected to `/onboarding` to pick sport interests before landing on `/schedule` |
+| Blocked users | Flag on `users/{uid}.blocked` — session is rejected at the cookie-verify step |
 
 ---
 
@@ -420,13 +422,14 @@ ADMIN users also see:
 |---|---|
 | Framework | Next.js 14 (App Router, TypeScript) |
 | UI | Tailwind CSS + shadcn/ui + Radix UI |
-| Database | Prisma 7 + SQLite (libsql adapter) |
-| Auth | NextAuth.js v5 beta + `@auth/prisma-adapter` |
+| Database | Cloud Firestore (via `firebase-admin`) |
+| Auth | Firebase Auth + server-side session cookies (`__session`) |
+| Hosting | Firebase App Hosting (Cloud Run, us-central1) |
 | Data fetching | SWR (chat polling, live scores) |
 | Email | Resend |
 | SMS | Twilio |
-| Sports data | ESPN public API (proxied server-side) |
-| Passwords | bcryptjs |
+| Push | Web Push (VAPID) via `web-push` |
+| Sports data | ESPN public API + Cricket API (both proxied server-side) |
 | Validation | Zod |
 | Dates | date-fns |
 
@@ -471,34 +474,78 @@ Soccer, Basketball, Pickleball, Tennis, Volleyball, American Football, Baseball,
 | `/api/admin/users` | GET | List all users (admin only) |
 | `/api/admin/users/[id]` | PATCH, DELETE | Promote / remove user (admin only) |
 | `/api/admin/messages/[id]` | PATCH, DELETE | Flag/unflag or delete chat message (admin only) |
+| `/api/auth/session` | POST | Exchange Firebase ID token for `__session` cookie |
+| `/api/push/subscribe` | POST | Register a Web Push subscription |
 | `/api/espn/scores` | GET | Proxied ESPN scoreboard |
 | `/api/espn/news` | GET | Proxied ESPN news |
+| `/api/cricket/scores` | GET | Proxied Cricket API scores |
+| `/api/cricket/news` | GET | Proxied Cricket API news |
 
 ## Environment Variables
 
+Production values live in `apphosting.yaml` (plain values) and Google Secret Manager (secrets). Local dev uses `.env.local`.
+
 ```bash
-DATABASE_URL="file:./dev.db"
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="<generated>"
-RESEND_API_KEY=""
-EMAIL_FROM="SportsPick <noreply@yourdomain.com>"
-TWILIO_ACCOUNT_SID=""
-TWILIO_AUTH_TOKEN=""
-TWILIO_PHONE_NUMBER=""
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
+# Public Firebase client config (safe in client bundle)
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=my-claude-build.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=my-claude-build
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=my-claude-build.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+NEXT_PUBLIC_APP_URL=https://sportsnextup.com
+
+# Firebase Admin (server)
+# On App Hosting, ADC is auto-injected — only project ID is needed.
+# Locally, set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON.
+FIREBASE_ADMIN_PROJECT_ID=my-claude-build
+
+# Web Push
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=        # secret in prod
+VAPID_PRIVATE_KEY=                   # secret in prod
+VAPID_EMAIL=                         # secret in prod
+
+# Third-party APIs (server only)
+CRICKET_API_KEY=                     # secret in prod
+RESEND_API_KEY=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
 ```
+
+## Deployment
+
+| Item | Value |
+|---|---|
+| Production URL | https://sportsnextup.com (also https://www.sportsnextup.com) |
+| Default backend URL | https://fun-apps--my-claude-build.us-central1.hosted.app |
+| Firebase project | `my-claude-build` |
+| App Hosting backend | `fun-apps` (region: `us-central1`) |
+| DNS provider | Cloudflare (records: A, TXT, CNAME for both apex and `www`, all DNS-only / gray cloud) |
+| SSL | Google Trust Services, auto-renewed |
+| Rollouts | Auto-deploy from `main` via Firebase App Hosting GitHub integration |
 
 ## Getting Started
 
 ```bash
 npm install
-npx prisma migrate dev
-npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
+# Place .env.local with the variables above; for Firebase Admin locally,
+# export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 npm run dev
 ```
 
-Default admin account: `admin@sportsapp.com` / `Admin1234!`
+Seed Firestore (one-time, dev only):
+
+```bash
+npx tsx scripts/seed-firestore.ts
+```
+
+Promote a registered user to ADMIN (one-shot):
+
+```bash
+npx tsx scripts/promote-admin.ts <email>
+```
 
 ## Branch
 
-`claude/sports-scheduling-app-4Y7nT`
+`main` (App Hosting auto-deploys on push)
