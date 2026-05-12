@@ -12,7 +12,11 @@ import { useToast } from '@/hooks/use-toast'
 import { initials } from '@/lib/utils'
 import useSWR from 'swr'
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`)
+  return res.json()
+}
 
 interface InviteModalProps {
   slotId: string
@@ -24,10 +28,11 @@ export function InviteModal({ slotId }: InviteModalProps) {
   const [sending, setSending] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const { data: users = [] } = useSWR(
-    open ? `/api/users/search?gameSlotId=${slotId}` : null,
+  const { data, error } = useSWR(
+    open ? `/api/users/search?slotId=${slotId}` : null,
     fetcher
   )
+  const users: Array<{ id: string; name: string }> = Array.isArray(data) ? data : []
 
   async function inviteUser(recipientId: string) {
     setSending(recipientId)
@@ -86,22 +91,20 @@ export function InviteModal({ slotId }: InviteModalProps) {
             <p className="text-xs text-muted-foreground">
               Users with shared sport interests who aren't on the roster.
             </p>
-            {users.length === 0 && (
+            {error && (
+              <p className="text-center text-sm text-destructive py-6">Couldn't load players. Try again.</p>
+            )}
+            {!error && users.length === 0 && (
               <p className="text-center text-sm text-muted-foreground py-6">No eligible players found</p>
             )}
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {users.map((user: any) => (
+              {users.map((user) => (
                 <div key={user.id} className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-muted">
                   <div className="flex items-center gap-2">
                     <Avatar className="h-8 w-8">
                       <AvatarFallback className="text-xs bg-secondary">{initials(user.name)}</AvatarFallback>
                     </Avatar>
-                    <div>
-                      <div className="text-sm font-medium">{user.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {user.sportInterests.map((si: any) => si.sport.icon).join(' ')}
-                      </div>
-                    </div>
+                    <div className="text-sm font-medium">{user.name}</div>
                   </div>
                   <Button
                     size="sm"
