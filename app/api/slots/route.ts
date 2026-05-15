@@ -4,39 +4,14 @@ import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { CreateSlotSchema } from '@/lib/validations'
 import { SPORTS } from '@/lib/constants'
-import { webpush } from '@/lib/web-push'
+import { notifySportInterested } from '@/lib/notifications'
 
 async function notifyInterestedUsers(sportSlug: string, sportName: string, sportIcon: string, slotId: string, title: string) {
-  try {
-    const usersSnap = await adminDb.collection('users').where('sportIds', 'array-contains', sportSlug).get()
-    const payload = JSON.stringify({
-      title: `${sportIcon} New ${sportName} game!`,
-      body: title,
-      url: `/schedule/${slotId}`,
-    })
-    await Promise.allSettled(
-      usersSnap.docs.flatMap(async (userDoc) => {
-        const subsSnap = await adminDb
-          .collection('users').doc(userDoc.id)
-          .collection('pushSubscriptions').get()
-        return Promise.allSettled(
-          subsSnap.docs.map(async (subDoc) => {
-            const { subscription } = subDoc.data()
-            try {
-              await webpush.sendNotification(subscription, payload)
-            } catch (err: any) {
-              // 404/410 = subscription gone; clean it up.
-              if (err?.statusCode === 404 || err?.statusCode === 410) {
-                await subDoc.ref.delete().catch(() => {})
-              }
-            }
-          })
-        )
-      })
-    )
-  } catch {
-    // Non-critical — don't fail the slot creation
-  }
+  await notifySportInterested(sportSlug, {
+    title: `${sportIcon} New ${sportName} game!`,
+    body: title,
+    url: `/schedule/${slotId}`,
+  })
 }
 
 function newId() {

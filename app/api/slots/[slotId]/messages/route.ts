@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { SendMessageSchema } from '@/lib/validations'
+import { getRosterUserIds, sendPushToUsers } from '@/lib/notifications'
 
 async function assertOnRoster(slotId: string, userId: string) {
   const doc = await adminDb.collection('gameSlots').doc(slotId).collection('rosters').doc(userId).get()
@@ -64,6 +65,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ slotId:
     flagged: false,
     createdAt: FieldValue.serverTimestamp(),
   })
+
+  const slotDoc = await adminDb.collection('gameSlots').doc(slotId).get()
+  const slot = slotDoc.data()
+  const recipients = (await getRosterUserIds(slotId)).filter((id) => id !== session.user.id)
+  if (recipients.length > 0) {
+    const preview = parsed.data.body.length > 80 ? parsed.data.body.slice(0, 77) + '…' : parsed.data.body
+    await sendPushToUsers(recipients, {
+      title: `${slot?.sportIcon ?? '💬'} ${session.user.name} · ${slot?.title ?? 'Game chat'}`,
+      body: preview,
+      url: `/schedule/${slotId}`,
+    })
+  }
 
   return NextResponse.json({ id: ref.id, ok: true }, { status: 201 })
 }

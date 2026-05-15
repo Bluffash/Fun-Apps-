@@ -6,6 +6,7 @@ import { SendInviteSchema } from '@/lib/validations'
 import { sendSMS } from '@/lib/twilio'
 import { sendEmail, inviteEmailHtml } from '@/lib/email'
 import { formatDate, formatTime } from '@/lib/utils'
+import { sendPushToUser } from '@/lib/notifications'
 
 export async function POST(req: Request, { params }: { params: Promise<{ slotId: string }> }) {
   const session = await auth()
@@ -54,6 +55,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slotId:
       respondedAt: null,
     }
     await inviteRef.set(inviteData)
+
+    await sendPushToUser(data.recipientId, {
+      title: `${slot.sportIcon} ${session.user.name} invited you`,
+      body: `${slot.title} · ${dateStr} ${timeStr}`,
+      url: `/invites`,
+    })
 
     // Send email to invited user
     const recipientDoc = await adminDb.collection('users').doc(data.recipientId).get()
@@ -104,6 +111,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slotId:
       respondedAt: null,
     }
     await inviteRef.set(inviteData)
+
+    await sendPushToUser(existingUser.id, {
+      title: `${slot.sportIcon} ${session.user.name} invited you`,
+      body: `${slot.title} · ${dateStr} ${timeStr}`,
+      url: `/invites`,
+    })
 
     const userData = existingUser.data()
     if (userData.email) {

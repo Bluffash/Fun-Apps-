@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { sendEmail, gameJoinedEmailHtml } from '@/lib/email'
+import { sendPushToUser } from '@/lib/notifications'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slotId: string }> }) {
   const session = await auth()
@@ -103,6 +104,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ slotId
     } catch (e) {
       console.error('Post-join email failed (non-fatal):', e)
     }
+
+    await sendPushToUser(added.slot.creatorId, {
+      title: `${added.slot.sportIcon} ${session.user.name} joined your game`,
+      body: `${added.slot.title} · ${added.rosterSizeAfter}/${added.capacity}`,
+      url: `/schedule/${slotId}`,
+    })
   }
 
   return NextResponse.json({ ok: true }, { status: 201 })
@@ -122,5 +129,15 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ slot
   if (!memberSnap.exists) return NextResponse.json({ error: 'Not in roster' }, { status: 404 })
 
   await memberRef.delete()
+
+  const slot = slotSnap.data()!
+  if (slot.creatorId && slot.creatorId !== session.user.id) {
+    await sendPushToUser(slot.creatorId, {
+      title: `${slot.sportIcon ?? '👋'} ${session.user.name} left your game`,
+      body: slot.title ?? 'A player left',
+      url: `/schedule/${slotId}`,
+    })
+  }
+
   return NextResponse.json({ ok: true })
 }
