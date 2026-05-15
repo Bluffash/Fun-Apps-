@@ -27,6 +27,7 @@ export const LEAGUES: Record<string, LeagueConfig> = {
   'ita.1':          { sport: 'soccer',     league: 'ita.1',          name: 'Serie A',            sportSlug: 'soccer' },
   'fra.1':          { sport: 'soccer',     league: 'fra.1',          name: 'Ligue 1',            sportSlug: 'soccer' },
   'ger.1':          { sport: 'soccer',     league: 'ger.1',          name: 'Bundesliga',         sportSlug: 'soccer' },
+  'usa.1':          { sport: 'soccer',     league: 'usa.1',          name: 'MLS',                sportSlug: 'soccer' },
   'uefa.champions': { sport: 'soccer',     league: 'uefa.champions', name: 'Champions League',  sportSlug: 'soccer' },
   'nba':            { sport: 'basketball', league: 'nba',            name: 'NBA',                sportSlug: 'basketball' },
   'nfl':            { sport: 'football',   league: 'nfl',            name: 'NFL',                sportSlug: 'american-football' },
